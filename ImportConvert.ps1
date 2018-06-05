@@ -73,33 +73,6 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
             return
         }
     }
-    Switch ($QueryType) {
-        USR {$GroupName = "SCCM $Publisher $Name $Version $PkgType $QueryType"}
-        WKS {$GroupName = "SCCM $Publisher $Name $Version $PkgType $QueryType"}
-        "USR,WKS" {$GroupName = "SCCM $Publisher $Name $Version $PkgType USR"}
-        "WKS,USR" {$GroupName = "SCCM $Publisher $Name $Version $PkgType USR"}
-        default {
-            Write-Host "Please specify a valid Querytype (ie USR,WKS)"
-            return
-        }
-    }
-
-
-    Write-Host -ForegroundColor Cyan "Looking for group $GroupName"
-    #Start-Sleep -Seconds 5
-    Try {
-        Get-ADGroup -Identity $GroupName
-        Write-Host -ForegroundColor Cyan "Group has been found"
-    } Catch {
-        #Create Group
-        If ($Description -eq "Restricted") {
-            $Ou = "OU=Restricted,OU=SCCM Targeting,OU=Utility,DC=USC,DC=Internal"
-        } Else {
-            $Ou = "OU=Unrestricted,OU=SCCM Targeting,OU=Utility,DC=USC,DC=Internal"
-        }
-        Write-Host -ForegroundColor Cyan "Creating AD Group $GroupName"
-        New-ADGroup -Name $GroupName -GroupCategory Security -GroupScope Global -DisplayName $GroupName -Path $Ou -Description "Created by SCCM 2012 Script"
-    }
     Write-Host "Working on $Publisher $Name $Version $QueryType"
     #Start-Sleep -Seconds 5
     #Test if source Path Exists
@@ -175,8 +148,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
         $UninstallCollectionName = "$Publisher $Name $Version $PkgType $_-Uninstall"
         Write-Host -ForegroundColor Cyan "Checking collection $CollectionName"
         #Create Collection
-        New-Collection -Type $_ -ColName $CollectionName -ADGroup $GroupName
-        New-Collection -Type "$($_)-Uninstall" -ColName $UninstallCollectionName -ADGroup $GroupName -AppName $PackageName
+        New-Collection -Type $_ -ColName $CollectionName
         Write-Host -ForegroundColor Cyan "Sleeping..."
         Start-Sleep -Seconds 10
         #Create Each Deployment
@@ -194,12 +166,6 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
             Write-Host -ForegroundColor Cyan "Creating deployment of $PackageName to $CollectionName"
             Start-CMApplicationDeployment -CollectionName $CollectionName -Comment "SD_" -DeployAction Install -DeployPurpose Required -Name $PackageName -UserNotification HideAll -OverrideServiceWindow $True -TimeBaseOn LocalTime
             Write-Host -ForegroundColor Green "Created Deployment for $Name"
-        }
-        $UninstallDeployment = Get-CMDeployment -CollectionName $UninstallCollectionName
-        If (!$UninstallDeployment) {
-            Write-Host -ForegroundColor Cyan "Creating deployment of $PackageName to $UninstallCollectionName"
-            Start-CMApplicationDeployment -CollectionName $UninstallCollectionName -Comment "SD_" -DeployAction Uninstall -DeployPurpose Required -Name $PackageName -UserNotification HideAll -OverrideServiceWindow $True -TimeBaseOn LocalTime
-            Write-Host -ForegroundColor Green "Created Uninstall Deployment for $PackageName"
         }
     }
     Set-Location c:
