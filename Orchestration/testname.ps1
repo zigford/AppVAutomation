@@ -1,0 +1,1 @@
+﻿Write-Output "$((Get-Item $MyInvocation.MyCommand.Source).BaseName)"
