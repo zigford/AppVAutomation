@@ -27,7 +27,7 @@ $CompletedRoot = "\\usc.internal\usc\appdev\General\Packaging\CompletedPackages"
 $RetiredRoot = "\\usc.internal\usc\appdev\General\Packaging\RetiredPackages"
 
 #Select all packages to be imported
-Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName -Include @("*.sprj","*.appv","*.apppackage") -Recurse} | ForEach-Object {
+Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName -Include @("*.sprj","*.appv","*.apppackage") -Recurse} | Select-Object -First 1 | ForEach-Object {
    
     Set-Location C:
     #Get all the info about the package
@@ -118,7 +118,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
     Switch ($PkgType)
 		{
 			APPV {            
-                New-AppV5Package -Source $SourceFolder -Publisher $Publisher -Name $PackageName -Version $Version -Description $Description -PackageDest $PackageDest\APPV5Packages
+                New-AppV5Package -Source $SourceFolder -Publisher $Publisher -Name $Name -Version $Version -Description $Description -PackageDest $PackageDest\APPV5Packages
                 If ($? -ne $True) {
                     Write-Host -ForegroundColor Red "Failed to create application"
                     return
@@ -166,7 +166,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
             DeployPurpose = 'Available'
             UserNotification = 'DisplayAll'
             OverrideServiceWindow = $True
-            TimeBasedOn = 'LocalTime'
+            TimeBaseOn = 'LocalTime'
             AvailableDateTime = (Get-Date).AddDays(14)
             DeadlineDateTime = (Get-Date).AddDays(28)
         }
@@ -212,7 +212,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
         $Deployment = Get-CMDeployment -CollectionName $CollectionName -SoftwareName $PackageName
         If (!$Deployment) {
             Write-Host -ForegroundColor Cyan "Creating deployment of $($psItem.Name) to $CollectionName"
-            Start-CMApplicationDeployment @psItem -WhatIf
+            New-CMApplicationDeployment @psItem 
             Write-Host -ForegroundColor Green "Created Deployment for $($psItem.Name)"
         }
 
