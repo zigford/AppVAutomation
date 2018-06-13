@@ -214,7 +214,7 @@ Param($XML)
             }
             $ValidAppSettings = @{}
             $AppSettings.Keys | ForEach-Object {
-                If ($AppSettings[$_] -match "") {
+                If ($AppSettings[$_]) {
                     $ValidAppSettings.Add($_,$AppSettings[$_])
                 }
             }
