@@ -14,12 +14,11 @@ If (Test-Path -Path 'D:\Program Files') {
 }
 $ConfigMgrModules = "$ProgramFiles\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
 Import-Module $ConfigMgrModules
-Import-Module ActiveDirectory
 $ErrorActionPreference = "Stop"
 $SiteCode = 'SC1'
 $SiteServer = 'wsp-configmgr01.usc.internal'
 #Setup PSDrive
-If (-Noe (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+If (-Not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
     New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer
 }
 $PackageRoot = "\\usc.internal\usc\appdev\General\Packaging\SourcePackages"
@@ -65,15 +64,15 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
     }
 
     Switch ($Description) {
-        Site {}
-        Open {}
-        Restricted {}
+        Site { $Target = 'AllMachines' }
+        Open { $Target = 'AllMachines' }
+        Restricted { $Target = 'StaffApproval' }
         default {
             Write-Host "Please specify a valid Package Type"
             return
         }
     }
-    Write-Host "Working on $Publisher $Name $Version $QueryType"
+    Write-Host "Working on $Publisher $Name $Version"
     #Start-Sleep -Seconds 5
     #Test if source Path Exists
     $BadSource = 0
@@ -143,31 +142,84 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
                 
     Start-Sleep -Seconds 10
     Set-Location SC1:\
-    $QueryType -split "," | ForEach-Object {
-        $CollectionName = "$Publisher $Name $Version $PkgType $_"
-        $UninstallCollectionName = "$Publisher $Name $Version $PkgType $_-Uninstall"
-        Write-Host -ForegroundColor Cyan "Checking collection $CollectionName"
-        #Create Collection
-        New-Collection -Type $_ -ColName $CollectionName
-        Write-Host -ForegroundColor Cyan "Sleeping..."
-        Start-Sleep -Seconds 10
-        #Create Each Deployment
-        Write-Host -ForegroundColor Cyan "Checking deployment"
-        Try {
-            Start-CMContentDistribution -Application (Get-CMApplication -Name $PackageName) -DistributionPointGroupName "Full Site" -EA SilentlyContinue
-        } Catch {
-            Write-Host "Content distribution failed. Might already be distributed"
-        }
-        Write-Host -ForegroundColor Cyan "Sleeping..."
-        Start-Sleep -Seconds 10
-        Write-Host -ForegroundColor Green "Distributed content for $PackageName"
-        $Deployment = Get-CMDeployment -CollectionName $CollectionName
-        If (!$Deployment) {
-            Write-Host -ForegroundColor Cyan "Creating deployment of $PackageName to $CollectionName"
-            Start-CMApplicationDeployment -CollectionName $CollectionName -Comment "SD_" -DeployAction Install -DeployPurpose Required -Name $PackageName -UserNotification HideAll -OverrideServiceWindow $True -TimeBaseOn LocalTime
-            Write-Host -ForegroundColor Green "Created Deployment for $Name"
+    
+    #region ContentDistribution
+    Try {
+        Start-CMContentDistribution -Application (Get-CMApplication -Name $PackageName) -DistributionPointGroupName "Full Site" -EA SilentlyContinue
+    } Catch {
+        Write-Host "Content distribution failed. Might already be distributed"
+    }
+    Write-Host -ForegroundColor Cyan "Sleeping..."
+    Start-Sleep -Seconds 10
+    Write-Host -ForegroundColor Green "Distributed content for $PackageName"
+    #endregion
+
+    #region CreateDeploymentSettings
+
+    function New-DeployHT {
+        @{
+            Name = $PackageName
+            CollectionName = "All USC Windows 10 Devices"
+            ApprovalRequired = $False
+            DeployAction = 'Install'
+            Comment = "JPH - Scripted"
+            DeployPurpose = 'Available'
+            UserNotification = 'DisplayAll'
+            OverrideServiceWindow = $True
+            TimeBasedOn = 'LocalTime'
+            AvailableDateTime = (Get-Date).AddDays(14)
+            DeadlineDateTime = (Get-Date).AddDays(28)
         }
     }
+    New-Alias ndht New-DeployHT
+    Write-Host -ForegroundColor Cyan "Checking collections"
+    Switch ($Target) {
+        AllMachines {
+            $DeploymentSettings = (ndht),(ndht)
+            $DeploymentSettings[0].CollectionName = "$Publisher $Name Pilot Machines"
+            $DeploymentSettings[0].AvailableDateTime = (Get-Date)
+            $DeploymentSettings[0].DeadlineDateTime = (Get-Date).AddDays(7)
+            $DeploymentType = 'WKS'
+        }
+        StaffApproval {
+            $DeploymentSettings = (ndht),(ndht)
+            $DeploymentSettings[0].CollectionName = "$Publisher $Name Pilot Users"
+            $DeploymentSettings[0].AvailableDateTime = (Get-Date)
+            $DeploymentSettings[0].DeadlineDateTime = (Get-Date).AddDays(7)
+            $DeploymentSettings[1].CollectionName = "All USC Staff Users"
+            $DeploymentSettings[1].ApprovalRequired = $True
+            $DeploymentType = 'USR'
+        }
+    } 
+
+    #endreion
+
+    #region CreateCollection
+
+    New-Collection -Type $DeploymentType -ColName $DeploymentSettings[0].CollectionName # Createh pilot collection
+    Write-Host -ForegroundColor Cyan "Sleeping..."
+    Start-Sleep -Seconds 10
+
+    #endregion
+
+    #region CreateDeployments
+
+    # Package Deployment Code
+    # Create Each Deployment
+    Write-Host -ForegroundColor Cyan "Checking deployment"
+    $DeploymentSettings | ForEach-Object {
+        $CollectionName = $psItem.CollectionName
+        $Deployment = Get-CMDeployment -CollectionName $CollectionName -SoftwareName $PackageName
+        If (!$Deployment) {
+            Write-Host -ForegroundColor Cyan "Creating deployment of $($psItem.Name) to $CollectionName"
+            Start-CMApplicationDeployment @psItem -WhatIf
+            Write-Host -ForegroundColor Green "Created Deployment for $($psItem.Name)"
+        }
+
+    }
+    
+    #endregion
+
     Set-Location c:
     Write-Host -ForegroundColor Cyan "Moving source files to complete folder."
     If (Test-Path -Path "$CompletedRoot\$($SourceFolder.Name)") {

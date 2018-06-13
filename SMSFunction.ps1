@@ -95,7 +95,7 @@ Param($XML)
                 Start-Sleep -Seconds 10
                 Write-Output "Checking membership rule for collection $ColName"
                 $ColQuery = $Collection.CollectionRules
-                If (!$ColQuery) {
+                If (!$ColQuery -and $ADGroup) {
                     #Add Membership Rule
                     Write-Output "Adding membership rule to collection $ColName"
                     $ColQuery = Add-CMDeviceCollectionQueryMembershipRule -CollectionId $Collection.CollectionID -QueryExpression $Query -RuleName $Type
@@ -116,7 +116,7 @@ Param($XML)
                 Start-Sleep -Seconds 10
                 Write-Output "Checking membership rule for collection $ColName"
                 $ColQuery = $Collection.CollectionRules
-                If (!$ColQuery) {
+                If (!$ColQuery -and $ADGroup) {
                     #Add Membership Rule
                     Write-Output "Adding membership rule to collection $ColName"
                     $ColQuery = Add-CMUserCollectionQueryMembershipRule -CollectionId $Collection.CollectionID -QueryExpression $Query -RuleName $Type
@@ -138,7 +138,7 @@ Param($XML)
                 Start-Sleep -Seconds 10
                 Write-Output "Checking membership rule for collection $ColName"
                 $ColQuery = $Collection.CollectionRules
-                If (!$ColQuery) {
+                If (!$ColQuery -and $ADGroup) {
                     #Add Membership Rule
                     Write-Output "Adding membership rule to collection $ColName"
                     $ColQuery = Add-CMUserCollectionQueryMembershipRule -CollectionId $Collection.CollectionID -QueryExpression $Query -RuleName $Type
@@ -159,7 +159,7 @@ Param($XML)
                 Start-Sleep -Seconds 10
                 Write-Output "Checking membership rule for collection $ColName"
                 $ColQuery = $Collection.CollectionRules
-                If (!$ColQuery) {
+                If (!$ColQuery -and $ADGroup) {
                     #Add Membership Rule
                     Write-Output "Adding membership rule to collection $ColName"
                     $ColQuery = Add-CMDeviceCollectionQueryMembershipRule -CollectionId $Collection.CollectionID -QueryExpression $Query -RuleName $Type
@@ -171,24 +171,89 @@ Param($XML)
     Set-Location $StartLoc
     }
 
+    function New-AppFromTemplate {
+        [CmdLetBinding()]
+        Param($Name,$Publisher,$Version,$SiteCode='SC1',$Description)
+        
+        $StartLoc = $PWD
+        #Check if a template exists
+        Set-Location -Path ${SiteCode}:\
+        $SourceApp = Get-CMApplication -Name "$Name Template"
+        If ($SourceApp) {
+            # Get bits from the source application to save into the new 
+            Set-Location $StartLoc
+            $TempIcon = New-Item -Path $Env:Temp -Name "$(Get-Random).png" -ItemType File
+            $App = [xml]($SourceApp.SDMPackageXML)
+            [IO.File]::WriteAllBytes($TempIcon,
+                    [convert]::FromBase64String($App.AppMgmtDigest.Resources.Icon.Data))
+            $Tags = $App.AppMgmtDigest.Application.DisplayInfo.Info.Tags.Tag
+            $LinkText = $App.AppMgmtDigest.Application.DisplayInfo.Info.InfoURLText
+            $UserDocumentation = $App.AppMgmtDigest.Application.DisplayInfo.Info.InfoURL
+            $Description = $App.AppMgmtDigest.Application.DisplayInfo.Info.Description
+            $PrivacyURL = $App.AppMgmtDigest.Application.DisplayInfo.Info.PrivacyURL
+            $SupportContact = $App.AppMgmtDigest.Application.Contacts.User.Id
+            $Owner = $App.AppMgmtDigest.Application.Owners.User.Id
+            $OptionalReference = $App.AppMgmtDigest.Application.CustomId.'#text'
+            # Build Hash Table for PS Blatting
+            $AppSettings = @{
+                'Description' = $SourceApp.LocalizedDescription
+                'IconLocationFile' = $TempIcon
+                'Keyword' = $Tags
+                'LinkText' = $LinkText
+                'LocalizedDescription' = $Description
+                'LocalizedName' = "$Name $Version"
+                'Name' = "$Name $Version"
+                'Owner' = $Owner
+                'PrivacyUrl' = $PrivacyUrl
+                'Publisher' = $SourceApp.Manufacturer
+                'ReleaseDate' = Get-Date
+                'SoftwareVersion' = $Version
+                'SupportContact' = $SupportContact
+                'UserDocumentation' = $UserDocumentation
+                'OptionalReference' = $OptionalReference
+            }
+            $ValidAppSettings = @{}
+            $AppSettings.Keys | ForEach-Object {
+                If ($AppSettings[$_] -match "") {
+                    $ValidAppSettings.Add($_,$AppSettings[$_])
+                }
+            }
+            Set-Location ${SiteCode}:\
+            Write-Host "Creating $Name $Version from Template App"
+            $NewApp = New-CMApplication @ValidAppSettings
+            Set-Location $StartLoc
+        } Else {
+            Write-Host "No template found, creating from scratch"
+            $NewApp = New-CMApplication -Publisher $Publisher `
+                -Name "$Name $Version" `
+                -SoftwareVersion $Version `
+                -Description $Description
+        }
+        return $NewApp
+    }
+
     function New-Appv5Package {
         Param($Source,$Publisher,$Name,$Version,$Description,$PackageDest,$SiteCode='SC1')
         If (!(Test-Path -Path "$PackageDest\$($Source.Name)")) {
             Write-Output "Copying source to Package store"
             Copy-Item -Path $Source.FullName -Destination $PackageDest -Force -Recurse
         }
+
+        $StartLoc = $PWD
         #"$PackageDest\$($Source.Name)" 
         $AppVFile = Get-ChildItem -Path "$PackageDest\$($Source.Name)" -Filter *.appv -Recurse
         If ($AppVFile) {
             Set-Location -Path ${SiteCode}:\
-            $Application = Get-CMApplication -Name $Name
+            $Application = Get-CMApplication -Name "$Name $Version"
+            Set-Location -Path $StartLoc
             If (!$Application) {
-                Write-Output "Creating application $Name"
-                $Application = New-CMApplication -Name $Name -Publisher $Publisher -SoftwareVersion $Version -Description $Description
-                Write-Output "Created application $Name"
+                Write-Output "Creating application $Name $Version"
+                $Application = New-AppFromTemplate -Publisher $Publisher -Name $Name -Version $Version -Description $Description -SiteCode $SiteCode
+                Write-Output "Created application $Name $Version"
             }
             Write-Output "Sleeping..."
             Start-Sleep -Seconds 10
+            Set-Location -Path ${SiteCode}:\
             $Deployment = Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
             If (!$Deployment) {
                 Write-Output "Adding deployment type APPV5 for $($Application.LocalizedDisplayName) for file $($AppVFile.FullName)"
@@ -199,10 +264,14 @@ Param($XML)
                     -InstallationFileLocation $AppVFile.FullName -AdministratorComment "AppV 5 Converted"
                 Write-Output "Setting application for Streaming"
                 Set-CMApplicationXML -ApplicationName $Application.LocalizedDisplayName -OnFastNetwork DownloadContentForStreaming #>
-                Write-Output "Created deployment type for $Name"
-                Write-Output "Setting Application default security scopes $Name"
-                Add-CMObjectSecurityScope -Name "Client Services" -InputObject (Get-CMApplication -Name $Name)
-                Remove-CMObjectSecurityScope -Name "Default" -InputObject (Get-CMApplication -Name $Name) -Force
+                Write-Output "Created deployment type for $Name $Version"
+                Write-Output "Setting Application default security scopes $Name $Version"
+                Add-CMObjectSecurityScope -Name "Client Services" -InputObject (Get-CMApplication -Name "$Name $Version")
+                Try {
+                    Remove-CMObjectSecurityScope -Name "Default" -InputObject (Get-CMApplication -Name "$Name $Version") -Force
+                } Catch {
+                    Write-Output "Security scopes might already be set"
+                }
 
             }
         } Else {
