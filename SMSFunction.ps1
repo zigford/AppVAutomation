@@ -66,16 +66,26 @@ Param($XML)
 
 
     function New-Collection {
-    Param($Type,$ColName,$ADGroup,$AppName,$WKSLimitingCollectionName='All USC Managed Computers',$USRLimitingCollectionName='All USC Staff and Student Users',$Domain='USC')
+    Param(
+        $Type,
+        $ColName,
+        $ADGroup,
+        $AppName,
+        $WKSLimitingCollectionName='All USC Managed Computers',
+        $USRLimitingCollectionName='All USC Staff and Student Users',
+        $Domain='USC'
+    )
     
-    function Get-UserAppVUninstallQ {
-    Param($AppName,$ADGroup,$Domain)
-        return "select SMS_R_USER.ResourceID,SMS_R_USER.ResourceType,SMS_R_USER.Name,SMS_R_USER.UniqueUserName,SMS_R_USER.WindowsNTDomain from SMS_R_User inner join SMS_G_System_AppClientState  on SMS_R_USER.UniqueUserName = SMS_G_System_AppClientState.UserName  where SMS_G_System_AppClientState.AppName=""$AppName"" and G_System_AppClientState.ComplianceState = 1 and SMS_R_USER.UniqueUserName not in (select distinct SMS_R_USER.UniqueUserName from SMS_R_User where UserGroupName = ""$Domain\\$ADGroup"")"
-    }
-    function Get-MachineAppVUninstallQ {
-    Param($AppName,$ADGroup,$Domain)
-        return "select SMS_R_SYSTEM.ResourceID from SMS_R_SYSTEM inner join SMS_G_System_AppClientState  on SMS_R_SYSTEM.ResourceID = SMS_G_System_AppClientState.ResourceId  where SMS_G_System_AppClientState.AppName=""$AppName"" and SMS_G_System_AppClientState.ComplianceState = 1 and SMS_R_SYSTEM.ResourceID not in (select distinct SMS_R_SYSTEM.ResourceID from SMS_R_SYSTEM where SystemGroupName = ""$Domain\\$ADGroup"")"
-    }
+        function Get-UserAppVUninstallQ {
+        Param($AppName,$ADGroup,$Domain)
+            return "select SMS_R_USER.ResourceID,SMS_R_USER.ResourceType,SMS_R_USER.Name,SMS_R_USER.UniqueUserName,SMS_R_USER.WindowsNTDomain from SMS_R_User inner join SMS_G_System_AppClientState  on SMS_R_USER.UniqueUserName = SMS_G_System_AppClientState.UserName  where SMS_G_System_AppClientState.AppName=""$AppName"" and G_System_AppClientState.ComplianceState = 1 and SMS_R_USER.UniqueUserName not in (select distinct SMS_R_USER.UniqueUserName from SMS_R_User where UserGroupName = ""$Domain\\$ADGroup"")"
+        }
+
+        function Get-MachineAppVUninstallQ {
+        Param($AppName,$ADGroup,$Domain)
+            return "select SMS_R_SYSTEM.ResourceID from SMS_R_SYSTEM inner join SMS_G_System_AppClientState  on SMS_R_SYSTEM.ResourceID = SMS_G_System_AppClientState.ResourceId  where SMS_G_System_AppClientState.AppName=""$AppName"" and SMS_G_System_AppClientState.ComplianceState = 1 and SMS_R_SYSTEM.ResourceID not in (select distinct SMS_R_SYSTEM.ResourceID from SMS_R_SYSTEM where SystemGroupName = ""$Domain\\$ADGroup"")"
+        }
+
         $StartLoc = Get-Location
         Set-Location SC1:\
         $DailySchedule = New-CMSchedule -RecurCount 1 -RecurInterval Days -Start (Get-Date "Friday, 25 October 2013 3:05:00 AM") -DurationInterval Days -DurationCount 0
@@ -87,7 +97,7 @@ Param($XML)
                 $Collection = Get-CMDeviceCollection -Name $ColName
                 If (!$Collection) {
                     Write-Output "Creating collection $ColName"
-                    $Collection = New-CMCollection -CollectionType Device -Name "$ColName" -LimitingCollectionName $WKSLimitingCollectionName -RefreshType Continuous
+                    $Collection = New-CMCollection -CollectionType Device -Name "$ColName" -LimitingCollectionName $WKSLimitingCollectionName #-RefreshType Continuous
                     If ($? -eq $False) { Write-Output "Failed to Create Collection"; return 1}
                     Write-Output "Created collection $ColName"
                 }
@@ -108,7 +118,7 @@ Param($XML)
                 $Collection = Get-CMUserCollection -Name $ColName
                 If (!$Collection) {
                     Write-Output "Creating user collection $ColName limited to $USRLimitingCollectionName"
-                    $Collection = New-CMCollection -CollectionType User -Name "$ColName" -RefreshType Continuous -LimitingCollectionName $USRLimitingCollectionName
+                    $Collection = New-CMCollection -CollectionType User -Name "$ColName" #-RefreshType Continuous -LimitingCollectionName $USRLimitingCollectionName
                     If ($? -eq $False) { Write-Output "Failed to Create Collection"; return 1}
                     Write-Output "Created collection $ColName"
                 }
