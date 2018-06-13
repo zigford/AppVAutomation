@@ -305,11 +305,7 @@ Param($XML)
         $Application = Get-CMApplication -Name $Name
         If (!$Application) {
             Write-Output "Creating application $Name"
-<<<<<<< Updated upstream
-            $Application = New-CMApplication -Name $Name -Publisher $Publisher -SoftwareVersion $Version -Description $Description
-=======
             $Application = New-AppFromTemplate -Name $Name -Publisher $Publisher -Version $Version -Description $Description
->>>>>>> Stashed changes
             Write-Output "Created application $Name"
         }
         Write-Output "Sleeping..."
