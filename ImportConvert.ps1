@@ -27,7 +27,7 @@ $CompletedRoot = "\\usc.internal\usc\appdev\General\Packaging\CompletedPackages"
 $RetiredRoot = "\\usc.internal\usc\appdev\General\Packaging\RetiredPackages"
 
 #Select all packages to be imported
-Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName -Include @("*.sprj","*.appv","*.apppackage") -Recurse} | Select-Object -First 1 | ForEach-Object {
+Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName -Include @("*.sprj","*.appv","*.apppackage") -Recurse} | ForEach-Object {
    
     Set-Location C:
     #Get all the info about the package
@@ -171,18 +171,17 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
             DeadlineDateTime = (Get-Date).AddDays(28)
         }
     }
-    New-Alias ndht New-DeployHT
     Write-Host -ForegroundColor Cyan "Checking collections"
     Switch ($Target) {
         AllMachines {
-            $DeploymentSettings = (ndht),(ndht)
+            $DeploymentSettings = (New-DeployHT),(New-DeployHT)
             $DeploymentSettings[0].CollectionName = "$Publisher $Name Pilot Machines"
             $DeploymentSettings[0].AvailableDateTime = (Get-Date)
             $DeploymentSettings[0].DeadlineDateTime = (Get-Date).AddDays(7)
             $DeploymentType = 'WKS'
         }
         StaffApproval {
-            $DeploymentSettings = (ndht),(ndht)
+            $DeploymentSettings = (New-DeployHT),(New-DeployHT)
             $DeploymentSettings[0].CollectionName = "$Publisher $Name Pilot Users"
             $DeploymentSettings[0].AvailableDateTime = (Get-Date)
             $DeploymentSettings[0].DeadlineDateTime = (Get-Date).AddDays(7)
