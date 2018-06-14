@@ -313,8 +313,12 @@ Param($XML)
         $Deployment = Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
         If (!$Deployment) {
             Write-Output "Adding deployment type MSI for $($Application.LocalizedDisplayName)"
-                Add-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName -MsiInstaller -AutoIdentifyFromInstallationFile `
-                    -InstallationFileLocation $MSIFile -AdministratorComment "Imported with APPVPackage XML" `
+            ### TODO ###
+            # Update with newer add-cmmsideploymenttype cmdlet. May make
+            # Set-CMApplicationXML redundant
+                Add-CMMsiDeploymentType - ApplicationName $Application.LocalizedDisplayName `
+                    -ContentLocation $MSIFile `
+                    -AdministratorComment "Imported with APPVPackage XML" `
                     -ForceForUnknownPublisher $True -DeploymentTypeName "$Name MSI"
                 Set-CMApplicationXML -ApplicationName $Application.LocalizedDisplayName -XMLUpdate (Get-MSICMD -XML $Descriptor)
         }
