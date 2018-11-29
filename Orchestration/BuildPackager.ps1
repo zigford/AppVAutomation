@@ -198,6 +198,6 @@ Do {
 } While (Test-Path -Path \\usc.internal\usc\appdev\General\Packaging\PackageQueue\$PackageName.ps1)
 
 Write-Verbose "Package $PackageName complete"
-Send-EmailMessage -Message "$PackageName has been AutoSequenced! Check the logs at General\Logs\PackageOrchestrator.log" -EmailAddress 'contact@if83bu.mailclark.ai' -Subject "$PackageName"
+Send-EmailMessage -Message "$PackageName has been AutoSequenced! Check the logs at General\Logs\PackageOrchestrator.log" -EmailAddress '3b7f44bd.usceduau.onmicrosoft.com@apac.teams.ms' -Subject "$PackageName"
 
 return $Machine
