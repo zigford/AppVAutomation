@@ -28,7 +28,7 @@ If ($LatestVersion -gt $NewestPackage.Version) {
 Set-Location "\\usc.internal\usc\appdev\SCCMSoftware\Git\Git for Windows\Latest\Working Files"
 #Get-Existing Package and Make a copy
 `$NewPackageName = "Git_Git for Windows_$($LatestVersion)_APPV_Open_USR"
-New-AppvSequencerPackage -Installer .\Install.bat -OutputPath `$env:USERPROFILE\Desktop -FullLoad -Name `$NewPackageName -TemplateFilePath .\git.appvt
+New-AppvSequencerPackage -Installer .\Install.bat -OutputPath `$env:USERPROFILE\Desktop -FullLoad -Name `$NewPackageName -TemplateFilePath .\git.appvt -PrimaryVirtualApplicationDirectory 'C:\Program Files\Git'
 If (Get-ChildItem -Path `$env:USERPROFILE\Desktop\`$NewPackageName *.appv) {
     #Package updated
     Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse \\usc.internal\usc\appdev\General\Packaging\SourcePackages
