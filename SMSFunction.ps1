@@ -118,7 +118,7 @@ Param($XML)
                 $Collection = Get-CMUserCollection -Name $ColName
                 If (!$Collection) {
                     Write-Output "Creating user collection $ColName limited to $USRLimitingCollectionName"
-                    $Collection = New-CMCollection -CollectionType User -Name "$ColName" #-RefreshType Continuous -LimitingCollectionName $USRLimitingCollectionName
+                    $Collection = New-CMCollection -CollectionType User -Name "$ColName" -LimitingCollectionName $USRLimitingCollectionName #-RefreshType Continuous 
                     If ($? -eq $False) { Write-Output "Failed to Create Collection"; return 1}
                     Write-Output "Created collection $ColName"
                 }
