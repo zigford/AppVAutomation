@@ -128,7 +128,22 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
                 [xml]$AppPackageXML = (Get-ChildItem -Path $SourceFolder.FullName -Filter *.apppackage | ForEach-Object {Get-Content -Path $_.FullName})
                 If ($AppPackageXML) {
                     #Found app descriptor, creating MSI Application
-                    New-MSIPackage -Source $SourceFolder -Publisher $Publisher -Name $PackageName -Version $Version -Description $Description -PackageDest $PackageDest\MSI -Descriptor $AppPackageXML
+                    New-MSIPackage -Source $SourceFolder -Publisher $Publisher -Name $Name -Version $Version -Description $Description -PackageDest $PackageDest\MSI -Descriptor $AppPackageXML
+                    If ($? -ne $True) {
+                        Write-Host -ForegroundColor Red "Failed to create application"
+                        return
+                    }
+                } Else {
+                    Write-Host -ForegroundColor Red "XML file application descriptor .apppackage not found."
+                    return
+                }
+            }
+            Default {
+                [xml]$AppPackageXML = (Get-ChildItem -Path $SourceFolder.FullName -Filter *.apppackage | ForEach-Object {Get-Content -Path $_.FullName})
+                If ($AppPackageXML) {
+                    #Found app descriptor, creating Custom Application
+                    New-CustomPackage -Source $SourceFolder -Publisher $Publisher -Name $Name -Version $Version -Description $Description -PackageType $_ `
+                        -PackageDest $PackageDest -Descriptor $AppPackageXML
                     If ($? -ne $True) {
                         Write-Host -ForegroundColor Red "Failed to create application"
                         return
