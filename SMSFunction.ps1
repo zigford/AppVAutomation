@@ -1,4 +1,62 @@
-﻿function Get-MSICMD {
+﻿function Add-ToHT {
+<# Adds members of an object to a HashTable #>
+Param($Object) 
+    $HT = @{}
+    $Object | Get-Member -MemberType Property,NoteProperty | ForEach-Object {
+        $Name = $_.Name
+        $Value = $Object."$Name"
+        Switch ($Name) { 
+            WhatIf  { $HT[$Name] = [switch]$True }
+            AddDetectionClause { $HT[$Name] = Get-Clauses $Value }
+            '#comment' {}
+            Default { $HT[$Name] = $Value }
+        }
+    }
+    return $HT
+}
+
+function Get-XMLSplat {
+Param($XML)
+    $ObjGrp = New-Object -TypeName PSCustomObject
+    # Forming the command line
+    If ($XML.Application.Type.Name -eq 'MSI') {
+        $InstallCommand = "msiexec.exe /i "
+        $UninstallCommand = "msiexec.exe /x " 
+    }
+    $ObjGrp | Add-Member -MemberType NoteProperty -Name DeploymentTypeName `
+        -Value "$($XML.Application.Name) - $($XML.Application.Type.Name)"
+    $ObjGrp | Add-Member -MemberType NoteProperty -Name InstallCommand `
+        -Value "$InstallCommand""$($XML.Application.Type.File)"" $($XML.Application.Type.Args)"
+    $ObjGrp | Add-Member -MemberType NoteProperty -Name UninstallCommand `
+        -Value "$UinstallCommand""$($XML.Application.Type.UnFile)"" $($XML.Application.Type.UnArgs)"
+    $SplatObj  = Add-ToHT $XML.Application.Type.ConfigManager
+    $SplatObj += Add-ToHT $ObjGrp
+
+    return $SplatObj
+}
+
+function Get-Clauses {
+    Param($Clauses)
+
+    ForEach ($Clause in $Clauses.DetectionClause) {
+        Switch ($Clause.Type) {
+            File { 
+                $DetectCParams = Add-ToHT $Clause.File
+                If ($Clause.Properties) {
+                    $DetectCParams['Value'] = [switch]$True 
+                    $DetectCParams += Add-ToHT $Clause.Properties
+                } else {
+                    $DetectCParams['Existence'] = [switch]$True
+                }
+                New-CMDetectionClauseFile @DetectCParams
+            }
+        }   
+    }
+
+}
+
+
+function Get-MSICMD {
 Param($XML)
 
     $MSIFile = $XML.Application.Type.MSIFile
@@ -290,7 +348,7 @@ Param($XML)
 
     }
 
-        function New-MSIPackage {
+    function New-MSIPackage {
         Param($Source,$Publisher,$Name,$Version,$Description,$PackageDest,$Descriptor)
         If (!(Test-Path -Path "$PackageDest\$($Source.Name)")) {
             Write-Output "Copying source to Package store"
@@ -316,11 +374,43 @@ Param($XML)
             ### TODO ###
             # Update with newer add-cmmsideploymenttype cmdlet. May make
             # Set-CMApplicationXML redundant
-                Add-CMMsiDeploymentType - ApplicationName $Application.LocalizedDisplayName `
+                Add-CMMsiDeploymentType -ApplicationName $Application.LocalizedDisplayName `
                     -ContentLocation $MSIFile `
                     -AdministratorComment "Imported with APPVPackage XML" `
                     -ForceForUnknownPublisher $True -DeploymentTypeName "$Name MSI"
                 Set-CMApplicationXML -ApplicationName $Application.LocalizedDisplayName -XMLUpdate (Get-MSICMD -XML $Descriptor)
+        }
+    }
+
+    function New-CustomPackage {
+        Param($Source,$Publisher,$Name,$Version,$Description,$PackageType,$Descriptor,$PackageDest)
+        $PackageDest = "$PackageDest\$PackageType"
+        If (!(Test-Path -Path "$PackageDest\$($Source.Name)")) {
+            Write-Output "Copying source to Package store"
+            Copy-Item -Path $Source.FullName -Destination $PackageDest -Force -Recurse
+        }
+
+        Set-Location -Path SC1:\
+        $Application = Get-CMApplication -Name $Name
+        If (!$Application) {
+            Write-Output "Creating application $Name"
+            $Application = New-AppFromTemplate -Name $Name -Publisher $Publisher -Version $Version -Description $Description
+            Write-Output "Created application $Name"
+        }
+        Write-Output "Sleeping..."
+        Start-Sleep -Seconds 10
+        $Deployment = Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
+        If (!$Deployment) {
+            Write-Output "Adding deployment type MSI for $($Application.LocalizedDisplayName)"
+            ### TODO ###
+            # Update with newer add-cmmsideploymenttype cmdlet. May make
+            # Set-CMApplicationXML redundant
+            $Splat = Get-XMLSplat -XML $Descriptor
+            $Splat['ContentLocation'] = "$PackageDest\$($Source.Name)"
+            $Splat['ApplicationName'] = $Application.LocalizedDisplayName
+            $Splat['AdministratorComment'] = "Imported with APPVPackage XML"
+                
+            Add-CMScriptDeploymentType @Splat
         }
     }
 
