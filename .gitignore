@@ -2,3 +2,4 @@ init.bat
 init_simple.bat
 Autounattend.xml
 MachineOrchestration.*
+api.key
