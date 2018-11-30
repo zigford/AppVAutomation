@@ -342,6 +342,9 @@ Param($XML)
                 }
 
             }
+
+            Add-SupercededDTs -NewAppName $Application.LocalizedDisplayName `
+                -Filter "${Name}*"
         } Else {
             Write-Output "Could not find APPVFile"
         }
@@ -401,7 +404,7 @@ Param($XML)
         Start-Sleep -Seconds 10
         $Deployment = Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
         If (!$Deployment) {
-            Write-Output "Adding deployment type MSI for $($Application.LocalizedDisplayName)"
+            Write-Output "Adding deployment type Custom Installer for $($Application.LocalizedDisplayName)"
             ### TODO ###
             # Update with newer add-cmmsideploymenttype cmdlet. May make
             # Set-CMApplicationXML redundant
@@ -411,8 +414,37 @@ Param($XML)
             $Splat['AdministratorComment'] = "Imported with APPVPackage XML"
                 
             Add-CMScriptDeploymentType @Splat
+            Add-SupercededDTs -NewAppName $Application.LocalizedDisplayName `
+                -Filter "${Name}*"
+        }
+        # Supercede apps
+
+    }
+
+    function Add-SupercededDTs {
+    Param(
+        [Parameter(Mandatory=$True)]$NewAppName,
+        [Parameter(Mandatory=$True)]$Filter,
+        [switch]$WhatIf
+    )
+
+        $App = Get-CMApplication -Name $NewAppName
+        $SupercededApps = Get-CMApplication -Name $Filter | Where-Object { 
+            $_.LocalizedDisplayName -ne $App.LocalizedDisplayName
+        }
+        ForEach ($SupercededApp in $SupercededApps) {
+            $DTs = $SupercededApp | Get-CMDeploymentType
+            ForEach ($DT in $DTs) {
+                Write-Output "Adding DT $($DT.LocalizedDisplayName) as superceded"
+                Add-CMDeploymentTypeSupersedence `
+                    -SupersedingDeploymentType ($App | Get-CMDeploymentType) `
+                    -SupersededDeploymentType $DT `
+                    -IsUninstall $True `
+                    -WhatIf:$WhatIf
+            }
         }
     }
+
 
     <#
 took some input for this script from http://blogs.msdn.com/b/one_line_of_code_at_a_time/archive/2012/01/17/microsoft-system-center-configuration-manager-2012-package-conversion-manager-plugin.aspx
