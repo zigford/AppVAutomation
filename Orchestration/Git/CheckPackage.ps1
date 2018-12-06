@@ -1,4 +1,6 @@
-﻿#Git.ps1
+﻿[CmdLetBinding(SupportsShouldProcess)]
+Param()
+#Git.ps1
 #Check for new versions of Git.
 #
 #1. Get old versions
@@ -6,9 +8,9 @@
 #3. Download latest source into staging directory
 #4. Generate .AppPackage xml file for importing into config manager
 #5. Move staging folder into SourcePackages for importing using importconvert
-. '.\InstallFunctions.ps1'
+. "$PSScriptRoot\InstallFunctions.ps1"
 $Working = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
-$PackageName = (Get-Item (Get-Location).Path).BaseName
+$PackageName = (Get-Item "$PSScriptRoot").BaseName
 $PackagePath = '\\usc.internal\usc\appdev\SCCMPackages\EXE'
 $OldVersions = Get-ChildItem -Path $PackagePath -Filter "Git_Git for Windows*"
 $NewestPackage = $OldVersions | Select-Object Name,FullName,@{
@@ -69,8 +71,10 @@ If ($LatestVersion -gt $NewestPackage.Version) {
 	</Type>
 </Application>
 "@
-    $PackageManifest | Out-File -FilePath "$PathToSource\$PackageName.AppPackage" -Force
-    Move-Item $PathToSource "\\usc.internal\usc\appdev\General\Packaging\SourcePackages"
+    If ($PSCmdlet.ShouldProcess("$LatestVersion", "Create $PackageName version ")) {
+        $PackageManifest | Out-File -FilePath "$PathToSource\$PackageName.AppPackage" -Force
+        Move-Item $PathToSource "\\usc.internal\usc\appdev\General\Packaging\SourcePackages"
+    }
 
 } else {
     Write-Verbose "Newest $PackageName already packaged: $($NewestPackage.Version)"
