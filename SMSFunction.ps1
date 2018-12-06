@@ -15,7 +15,13 @@ Param($Object)
     return $HT
 }
 
-function Get-XMLSplat {
+function Get-XMLRESplat {
+    # Create a hash table of parameters to add dependencies to a DeploymentType based on information stored in XML
+    Param($Object)
+
+}
+
+function Get-XMLDTSplat {
 Param($XML)
     $ObjGrp = New-Object -TypeName PSCustomObject
     # Forming the command line
@@ -239,6 +245,44 @@ Param($XML)
     Set-Location $StartLoc
     }
 
+    function New-AppDepsFromTemplate {
+        [CmdLetBinding(SupportsShouldProcess)]
+        Param(
+                $Publisher,
+                $Name,
+                $Version
+        )
+
+        $AppName = "$Name $Version"
+        $TemplateAppName = "$Name Template"
+        Get-CMDeploymentType -ApplicationName $TemplateAppName | ForEach-Object {
+            $TemplateDT = $PSItem
+            $TemplateDT | Get-CMDeploymentTypeDependencyGroup | ForEach-Object {
+                # Process Groups
+                $DGroup = $PSItem
+                # Get the group if it exists on the new app
+                $NewGroup = Get-CMDeploymentType -ApplicationName $AppName | 
+                Get-CMDeploymentTypeDependencyGroup -GroupName $DGroup.GroupName
+                If (!$NewGroup) {
+                    # Create new dep group cause it doesn't exist on new app
+                    If ($PSCmdlet.SupportsShould("$AppName", "Add DT Dep group to")) {
+                        $NewGroup = Get-CMDeploymentType -ApplicationName $AppName |
+                        New-CMDeploymentTypeDependencyGroup -GroupName $DGroup.GroupName
+                    }
+                }
+                $DGroup | Get-CMDeploymentTypeDependency | ForEach-Object {
+                    # Process dependencies in the group
+                    $Dependency = $PSItem
+                    # Add the dependency to the new group
+                    If ($PSCmdlet.SupportsShould("$AppName", "Add DT Dep to")) {
+                        $NewGroup | Add-CMDeploymentTypeDependency -DeploymentTypeDependency $Dependency `
+                            -IsAutoInstall $True
+                    }
+                }
+            }
+        }
+    }
+
     function New-AppFromTemplate {
         [CmdLetBinding()]
         Param($Name,$Publisher,$Version,$SiteCode='SC1',$Description)
@@ -342,7 +386,7 @@ Param($XML)
                 }
 
             }
-
+            New-AppDepsFromTemplate -Publisher $Publisher -Name $Name -Version $Version 
             Add-SupercededDTs -NewAppName $Application.LocalizedDisplayName `
                 -Filter "${Name}*"
         } Else {
@@ -408,12 +452,13 @@ Param($XML)
             ### TODO ###
             # Update with newer add-cmmsideploymenttype cmdlet. May make
             # Set-CMApplicationXML redundant
-            $Splat = Get-XMLSplat -XML $Descriptor
-            $Splat['ContentLocation'] = "$PackageDest\$($Source.Name)"
-            $Splat['ApplicationName'] = $Application.LocalizedDisplayName
-            $Splat['AdministratorComment'] = "Imported with APPVPackage XML"
+            $DTSplat = Get-XMLDTSplat -XML $Descriptor
+            $DTSplat['ContentLocation'] = "$PackageDest\$($Source.Name)"
+            $DTSplat['ApplicationName'] = $Application.LocalizedDisplayName
+            $DTSplat['AdministratorComment'] = "Imported with APPVPackage XML"
+            $RESplat = Get-XMLRESplat -XML $Descriptor
                 
-            Add-CMScriptDeploymentType @Splat
+            Add-CMScriptDeploymentType @DTSplat
             Add-SupercededDTs -NewAppName $Application.LocalizedDisplayName `
                 -Filter "${Name}*"
         }
