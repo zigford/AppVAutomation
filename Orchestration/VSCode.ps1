@@ -1,4 +1,6 @@
-﻿#VSCode.ps1
+﻿[CmdLetBinding(SupportsShouldProcess)]
+Param()
+#VSCode.ps1
 #Check for new versions of VSCode.
 #
 #1. Get old versions
@@ -39,8 +41,10 @@ If (Get-ChildItem -Path `$PackagePath *.appv) {
 Get-Date | Write-Output | OutFile \\usc.internal\usc\appdev\General\Packaging\VSCode.Package
 "@
 
-    $PackageQueue | Out-File -FilePath \\usc.internal\usc\appdev\General\Packaging\PackageQueue\$PackageName.ps1 -Force
-    $PackageVM = & "$Working\PackageOrchestrator.ps1" -Build -PackageName $PackageName
+    If ($PSCmdlet.ShouldProcess("$LatestVersion", "Create VSCode version ")) {
+        $PackageQueue | Out-File -FilePath \\usc.internal\usc\appdev\General\Packaging\PackageQueue\$PackageName.ps1 -Force
+        $PackageVM = & "$Working\PackageOrchestrator.ps1" -Build -PackageName $PackageName
+    }
 } else {
     Write-Verbose "Newest $PackageName already packaged: $($NewestPackage.Version)"
 }
