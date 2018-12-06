@@ -1,5 +1,5 @@
 ﻿#Package Checker - Check for new versions of each app defined
-[CmdLetBinding()]
+[CmdLetBinding(SupportsShouldProcess)]
 Param()
 Start-Transcript -Path \\usc.internal\usc\appdev\General\Logs\AutoSequencer.log -Append
 $Working = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
@@ -14,4 +14,4 @@ ForEach ($DefinedApp in $DefinedApps) {
     }
 }
 
-Stop-Transcript
+Stop-Transcript -EA SilentlyContinue
