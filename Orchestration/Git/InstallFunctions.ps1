@@ -274,7 +274,7 @@ function Get-PowerBIVersion {
 function Get-GitDownloadLink{
     Param([switch]$Prerelease)
 
-    $token = Get-Content .\api.key
+    $token = Get-Content "$PSScriptRoot\api.key"
     $Base64Token = [System.Convert]::ToBase64String([char[]]$token)
     $Headers = @{
         "content-type" = "application/json"
