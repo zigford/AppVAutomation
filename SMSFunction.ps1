@@ -265,7 +265,7 @@ Param($XML)
                 Get-CMDeploymentTypeDependencyGroup -GroupName $DGroup.GroupName
                 If (!$NewGroup) {
                     # Create new dep group cause it doesn't exist on new app
-                    If ($PSCmdlet.SupportsShould("$AppName", "Add DT Dep group to")) {
+                    If ($PSCmdlet.ShouldProcess("$AppName", "Add DT Dep group to")) {
                         $NewGroup = Get-CMDeploymentType -ApplicationName $AppName |
                         New-CMDeploymentTypeDependencyGroup -GroupName $DGroup.GroupName
                     }
@@ -274,7 +274,7 @@ Param($XML)
                     # Process dependencies in the group
                     $Dependency = $PSItem
                     # Add the dependency to the new group
-                    If ($PSCmdlet.SupportsShould("$AppName", "Add DT Dep to")) {
+                    If ($PSCmdlet.ShouldProcess("$AppName", "Add DT Dep to")) {
                         $NewGroup | Add-CMDeploymentTypeDependency -DeploymentTypeDependency $Dependency `
                             -IsAutoInstall $True
                     }
