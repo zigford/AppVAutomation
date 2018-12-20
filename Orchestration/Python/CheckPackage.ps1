@@ -48,7 +48,7 @@ If ($LatestVersion -gt $NewestPackage.Version) {
 <Application Name="Python" Version="$LatestVersion" Vendor="Python">
 	<Type Name="EXE">
 		<File>$LatestDownloadFileName</File>
-		<Args>/quiet InstallAllUsers=1 PrependPath=1 Include_test=0</Args> <!-- Options: arguments for the exe to install -->
+		<Args>/quiet InstallAllUsers=1 TargetDir="%ProgramFiles%\Python"</Args> <!-- Options: arguments for the exe to install -->
         <UnFile>$LatestDownloadFileName</UnFile>
         <UnArgs>/quiet /uninstall</UnArgs>
         <ConfigManager>
