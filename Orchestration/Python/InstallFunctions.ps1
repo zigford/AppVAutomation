@@ -340,7 +340,7 @@ function Get-GitLatestVersion {
 #region python
 function Get-PythonReleaseVersions {
     $url = 'https://www.python.org/ftp/python/'
-    Invoke-WebRequest -Uri $url -SkipCertificateCheck |
+    Invoke-WebRequest -Uri $url |
     Select-Object -ExpandProperty Links | ForEach-Object {
         [Version]$v = $null
         $s = $_.href.TrimEnd('/')
@@ -362,7 +362,7 @@ function Get-PythonLatestProdVersion {
         $VerString = $Versions[$CheckVer].ToString()
         $CheckUrl = "${BaseUrl}/${VerString}/"
         Write-Verbose "Checking $CheckUrl"
-        Invoke-WebRequest -Uri $CheckUrl -SkipCertificateCheck |
+        Invoke-WebRequest -Uri $CheckUrl |
         Select-Object -ExpandProperty Links | ForEach-Object {
             If ($_.href -eq "python-$VerString-amd64.exe") {
                 $NotRCRelease = $False
