@@ -4,7 +4,7 @@ Param()
 Start-Transcript -Path \\usc.internal\usc\appdev\General\Logs\AutoSequencer.log -Append
 $Working = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 
-$DefinedApps='PowerBI.ps1','Firefox-Quantum.ps1','VSCode.ps1','Git'
+$DefinedApps='PowerBI.ps1','Firefox-Quantum.ps1','VSCode.ps1','Git','Python'
 ForEach ($DefinedApp in $DefinedApps) {
     Write-Verbose "Running test for $DefinedApp at $(Get-Date)" -Verbose
     If ((Get-Item "$Working\$DefinedApp").PSIsContainer) {
