@@ -1,10 +1,14 @@
-﻿########################
+﻿#[CmdLetBinding()]
+#Param()
+
+########################
 #Setuping enviironments#
 #and Variables         #
 ########################
 #Dot Source Queries and functions
 Set-Location $env:SystemDrive
 . $PSScriptRoot\SMSFunction.ps1
+. $PSScriptRoot\Orchestration\Functions\Send-EmailMessage.ps1
 If (Test-Path -Path 'D:\Program Files') {
     $ProgramFiles = 'D:\Program Files'
 } ElseIf (Test-Path -Path 'C:\Program Files (x86)') {
@@ -241,5 +245,6 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
         Rename-Item -Path "$CompletedRoot\$($SourceFolder.Name)" -NewName "$($SourceFolder.Name)_Renamed_Duplicate"
     }
     Move-Item $SourceFolder.FullName $CompletedRoot -Force
+    Send-EmailMessage -Message "$Publisher $Name $Version has been auto imported to SCCM! Check the logs at General\Logs\PackageOrchestrator.log" -EmailAddress '3b7f44bd.usceduau.onmicrosoft.com@apac.teams.ms' -Subject "$Name $Version"
     Stop-Transcript
 }
