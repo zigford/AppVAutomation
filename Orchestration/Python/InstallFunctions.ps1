@@ -345,7 +345,7 @@ function Get-PythonReleaseVersions {
         [Version]$v = $null
         $s = $_.href.TrimEnd('/')
         if ([Version]::TryParse($s,[ref]$v)) {
-            [Version]::Parse($s)
+            $v
         }
     }
 }
@@ -355,9 +355,9 @@ function Get-PythonLatestProdVersion {
     Param()
     $Versions = Get-PythonReleaseVersions | Sort-Object -Descending
     $BaseURL = 'https://www.python.org/ftp/python'
-    $NotRCRelease = $True
+    $RCRelease = $True
     $CheckVer = 0
-    While ($NotRCRelease -and $CheckVer -le $Versions.Count -1) {
+    While ($RCRelease -and $CheckVer -le $Versions.Count -1) {
         Write-Warning "CheckVer is $CheckVer"
         $VerString = $Versions[$CheckVer].ToString()
         $CheckUrl = "${BaseUrl}/${VerString}/"
@@ -365,7 +365,7 @@ function Get-PythonLatestProdVersion {
         Invoke-WebRequest -Uri $CheckUrl |
         Select-Object -ExpandProperty Links | ForEach-Object {
             If ($_.href -eq "python-$VerString-amd64.exe") {
-                $NotRCRelease = $False
+                $RCRelease = $False
             } 
         }
         $CheckVer++
