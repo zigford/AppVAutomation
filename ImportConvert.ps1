@@ -54,11 +54,11 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
     Start-Transcript -Path "$LogDir\$PackageName.log"
     #Verify Name
     If (-Not $Publisher) {
-        Write-Host "Please specify a valid publisher"
+        Write-Error "Please specify a valid publisher"
         return
     }
     If (-Not $Name) {
-        Write-Host "Please specify a valid Name"
+        Write-Error "Please specify a valid Name"
         return
     }
     Switch ($PkgType) {
@@ -67,8 +67,8 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
         EXE {}
         VBS {}
         PS1 {}
-        default { 
-            Write-Host "Please specify a valid Package Type"
+        default {
+            Write-Error "Please specify a valid Package Type"
             return
         }
     }
@@ -78,28 +78,28 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
         Open { $Target = 'AllMachines' }
         Restricted { $Target = 'StaffApproval' }
         default {
-            Write-Host "Please specify a valid Package Type"
+            Write-Error "Please specify a valid Package Type"
             return
         }
     }
-    Write-Host "Working on $Publisher $Name $Version"
+    Write-Output "Working on $Publisher $Name $Version"
     #Start-Sleep -Seconds 5
     #Test if source Path Exists
     $BadSource = 0
     If (!(Test-Path -Path $SourceFolder.FullName)) {
         $BadSource++
-        Write-Host -ForegroundColor Red $SourceFolder.FullName
+        Write-Error $SourceFolder.FullName
         return
     }
     #Create Package
-    Write-Host -ForegroundColor Cyan "Checking application $Name"
+    Write-Information "Checking application $Name"
     Get-ChildItem -Path $SourceFolder.FullName -Recurse | Where-Object {$_.BaseName -match ","} | ForEach-Object {Rename-Item -Path $_.FullName -NewName $_.Name.Replace(",","-")}
     Switch ($PkgType)
 		{
 			APPV {            
                 New-AppV5Package -Source $SourceFolder -Publisher $Publisher -Name $Name -Version $Version -Description $Description -PackageDest $PackageDest\APPV5Packages
                 If ($? -ne $True) {
-                    Write-Host -ForegroundColor Red "Failed to create application"
+                    Write-Error "Failed to create application"
                     return
                 }
             }
@@ -109,13 +109,15 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
                     #Found app descriptor, creating MSI Application
                     New-MSIPackage -Source $SourceFolder -Publisher $Publisher -Name $Name -Version $Version -Description $Description -PackageDest $PackageDest\MSI -Descriptor $AppPackageXML
                     If ($? -ne $True) {
-                        Write-Host -ForegroundColor Red "Failed to create application"
+                        Write-Error "Failed to create application"
                         return
                     }
                 } Else {
-                    Write-Host -ForegroundColor Red "XML file application descriptor .apppackage not found."
                     return
                 }
+            } Else {
+                Write-Error "XML file .apppackage not found."
+                return
             }
             Default {
                 [xml]$AppPackageXML = (Get-ChildItem -Path $SourceFolder.FullName -Filter *.apppackage | ForEach-Object {Get-Content -Path $_.FullName})
@@ -124,13 +126,15 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
                     New-CustomPackage -Source $SourceFolder -Publisher $Publisher -Name $Name -Version $Version -Description $Description -PackageType $_ `
                         -PackageDest $PackageDest -Descriptor $AppPackageXML
                     If ($? -ne $True) {
-                        Write-Host -ForegroundColor Red "Failed to create application"
+                        Write-Error "Failed to create application"
                         return
                     }
                 } Else {
-                    Write-Host -ForegroundColor Red "XML file application descriptor .apppackage not found."
                     return
                 }
+            } Else {
+                Write-Error "XML file .apppackage not found."
+                return
             }
         }
     }
@@ -141,11 +145,11 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
     Try {
         Start-CMContentDistribution -Application (Get-CMApplication -Name $PackageName) -DistributionPointGroupName "Full Site" -EA SilentlyContinue
     } Catch {
-        Write-Host "Content distribution failed. Might already be distributed"
+        Write-Warning "Content distribution failed. Might already be distributed"
     }
-    Write-Host -ForegroundColor Cyan "Sleeping..."
+    Write-Output "Sleeping..."
     Start-Sleep -Seconds 10
-    Write-Host -ForegroundColor Green "Distributed content for $PackageName"
+    Write-Output "Distributed content for $PackageName"
     #endregion
 
     #region CreateDeploymentSettings
@@ -165,7 +169,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
             DeadlineDateTime = (Get-Date).AddDays(28)
         }
     }
-    Write-Host -ForegroundColor Cyan "Checking collections"
+    Write-Output "Checking collections"
     Switch ($Target) {
         AllMachines {
             $DeploymentSettings = (New-DeployHT),(New-DeployHT)
@@ -190,7 +194,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
     #region CreateCollection
 
     New-Collection -Type $DeploymentType -ColName $DeploymentSettings[0].CollectionName # Createh pilot collection
-    Write-Host -ForegroundColor Cyan "Sleeping..."
+    Write-Verbose "Sleeping..."
     Start-Sleep -Seconds 10
 
     #endregion
@@ -199,22 +203,21 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
 
     # Package Deployment Code
     # Create Each Deployment
-    Write-Host -ForegroundColor Cyan "Checking deployment"
+    Write-Verbose "Checking deployment"
     $DeploymentSettings | ForEach-Object {
         $CollectionName = $psItem.CollectionName
         $Deployment = Get-CMDeployment -CollectionName $CollectionName -SoftwareName $PackageName
         If (!$Deployment) {
-            Write-Host -ForegroundColor Cyan "Creating deployment of $($psItem.Name) to $CollectionName"
             New-CMApplicationDeployment @psItem 
-            Write-Host -ForegroundColor Green "Created Deployment for $($psItem.Name)"
+            Write-Verbose "Creating deployment of $($psItem.Name) to $CollName"
+            Write-Verbose "Created Deployment for $($psItem.Name)"
         }
 
     }
-    
     #endregion
 
     Set-Location c:
-    Write-Host -ForegroundColor Cyan "Moving source files to complete folder."
+    Write-Verbose "Moving source files to complete folder."
     If (Test-Path -Path "$CompletedRoot\$($SourceFolder.Name)") {
         #Package previously completed. Lets rename the old one
         Rename-Item -Path "$CompletedRoot\$($SourceFolder.Name)" -NewName "$($SourceFolder.Name)_Renamed_Duplicate"
