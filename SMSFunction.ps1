@@ -73,7 +73,7 @@ function Get-Clause {
                 New-CMDetectionClauseFile @DetectCParams
             }
             KeyValue {
-                $DetectCParams = Add-ToHT $Clause.KeyValue
+                $DetectCParams = Add-ToHT $Clause.File
                 If ($Clause.Properties) {
                     $DetectCParams['Value'] = [switch]$True
                     $DetectCParams += Add-ToHT $Clause.Properties
@@ -144,7 +144,6 @@ Param($XML)
     }
     $ProductCode = $XML.Application.Type.ProductCode
     $UninstallCommand = "msiexec /x $ProductCode REBOOT=$REBOOT $Switches"
-    # $Context = 
     $MSIObject = New-Object -TypeName psobject -Property @{
         'InstallCommand' = $InstallCommand
         'UninstallCommand' = $UninstallCommand
@@ -188,7 +187,7 @@ Param(
     Set-Location SC1:\
     $DailySchedule = New-CMSchedule -RecurCount 1 -RecurInterval Days -Start (Get-Date "Friday, 25 October 2013 3:05:00 AM") -DurationInterval Days -DurationCount 0
     $HourlySchedule = New-CMSchedule -RecurCount 1 -RecurInterval Hours -Start (Get-Date "Friday, 25 October 2013 3:05:00 PM") -DurationInterval Days -DurationCount 0
-        
+
     Switch ($Type) {
         "WKS" {
             $Query = "select SMS_R_SYSTEM.ResourceID,SMS_R_SYSTEM.ResourceType,SMS_R_SYSTEM.Name,SMS_R_SYSTEM.SMSUniqueIdentifier,SMS_R_SYSTEM.ResourceDomainORWorkgroup,SMS_R_SYSTEM.Client from SMS_R_System where SMS_R_System.SystemGroupName = ""$Domain\\$ADGroup"""
@@ -216,7 +215,7 @@ Param(
             $Collection = Get-CMUserCollection -Name $ColName
             If (!$Collection) {
                 Write-Output "Creating user collection $ColName limited to $USRLimitingCollectionName"
-                $Collection = New-CMCollection -CollectionType User -Name "$ColName" -LimitingCollectionName $USRLimitingCollectionName #-RefreshType Continuous 
+                $Collection = New-CMCollection -CollectionType User -Name "$ColName" -LimitingCollectionName $USRLimitingCollectionName
                 If ($? -eq $False) { Write-Output "Failed to Create Collection"; return 1}
                 Write-Output "Created collection $ColName"
             }
@@ -295,7 +294,7 @@ function New-AppDepsFromTemplate {
             # Process Groups
             $DGroup = $PSItem
             # Get the group if it exists on the new app
-            $NewGroup = Get-CMDeploymentType -ApplicationName $AppName | 
+            $NewGroup = Get-CMDeploymentType -ApplicationName $AppName |
             Get-CMDeploymentTypeDependencyGroup -GroupName $DGroup.GroupName
             If (!$NewGroup) {
                 # Create new dep group cause it doesn't exist on new app
@@ -320,13 +319,13 @@ function New-AppDepsFromTemplate {
 function New-AppFromTemplate {
     [CmdLetBinding()]
     Param($Name,$Publisher,$Version,$SiteCode='SC1',$Description)
-    
+
     $StartLoc = $PWD
     #Check if a template exists
     Set-Location -Path ${SiteCode}:\
     $SourceApp = Get-CMApplication -Name "$Name Template"
     If ($SourceApp) {
-        # Get bits from the source application to save into the new 
+        # Get bits from the source application to save into the new
         Set-Location $StartLoc
         $TempIcon = New-Item -Path $Env:Temp -Name "$(Get-Random).png" -ItemType File
         $App = [xml]($SourceApp.SDMPackageXML)
@@ -386,7 +385,6 @@ function New-Appv5Package {
     }
 
     $StartLoc = $PWD
-    #"$PackageDest\$($Source.Name)" 
     $AppVFile = Get-ChildItem -Path "$PackageDest\$($Source.Name)" -Filter *.appv -Recurse
     If ($AppVFile) {
         Set-Location -Path ${SiteCode}:\
@@ -405,7 +403,7 @@ function New-Appv5Package {
             Write-Output "Adding deployment type APPV5 for $($Application.LocalizedDisplayName) for file $($AppVFile.FullName)"
             Add-CMAppv5XDeploymentType -ApplicationName $Application.LocalizedDisplayName -Comment "AppV 5 Converted" `
                 -ContentLocation $AppVFile.FullName -FastNetworkDeploymentMode DownloadContentForStreaming `
-                -SlowNetworkDeploymentMode DownloadContentForStreaming 
+                -SlowNetworkDeploymentMode DownloadContentForStreaming
             <#Add-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName -AppV5xInstaller -ForceForUnknownPublisher $True `
                 -InstallationFileLocation $AppVFile.FullName -AdministratorComment "AppV 5 Converted"
             Write-Output "Setting application for Streaming"
@@ -420,7 +418,7 @@ function New-Appv5Package {
             }
 
         }
-        New-AppDepsFromTemplate -Publisher $Publisher -Name $Name -Version $Version 
+        New-AppDepsFromTemplate -Publisher $Publisher -Name $Name -Version $Version
         Add-SupercededDTs -NewAppName $Application.LocalizedDisplayName `
             -Filter "${Name}*"
     } Else {
@@ -510,7 +508,7 @@ $PackageDest = "$PackageDest\$PackageType"
         $RESplat = Get-XMLRESplat -XML $Descriptor
         # Setup superceded settings
         $SSSplat = Get-XMLSSSplat -XML $Descriptor
-            
+
         Add-CMScriptDeploymentType @DTSplat
         Add-SupercededDTs -NewAppName $Application.LocalizedDisplayName `
             -Filter "${Name}*" @SSSplat
@@ -527,7 +525,7 @@ Param(
 )
 
     $App = Get-CMApplication -Name $NewAppName
-    $SupercededApps = Get-CMApplication -Name $Filter | Where-Object { 
+    $SupercededApps = Get-CMApplication -Name $Filter | Where-Object {
         $_.LocalizedDisplayName -ne $App.LocalizedDisplayName
     }
     ForEach ($SupercededApp in $SupercededApps) {
@@ -566,47 +564,46 @@ function Set-CMApplicationXML {
     {
       $returnValue = $null
       $connectionManager = new-object Microsoft.ConfigurationManagement.ManagementProvider.WqlQueryEngine.WqlConnectionManager
-  
+
       if($connectionManager.Connect($siteServerName))
       {
           $result = $connectionManager.QueryProcessor.ExecuteQuery($query)
-      
+
           foreach($i in $result.GetEnumerator())
           {
             $returnValue = $i
             break
           }
-      
-          $connectionManager.Dispose() 
+
+          $connectionManager.Dispose()
       }
-  
+
       $returnValue
     }
 
     function Get-ApplicationObjectFromServer($appName,$siteServerName)
-    {    
-        $resultObject = Get-ExecuteWqlQuery $siteServerName "select thissitecode from sms_identification" 
+    {
+        $resultObject = Get-ExecuteWqlQuery $siteServerName "select thissitecode from sms_identification"
         $siteCode = $resultObject["thissitecode"].StringValue
-    
+
         $path = [string]::Format("\\{0}\ROOT\sms\site_{1}", $siteServerName, $siteCode)
         $scope = new-object System.Management.ManagementScope -ArgumentList $path
-    
+
         $query = [string]::Format("select * from sms_application where LocalizedDisplayName='{0}' AND ISLatest='true'", $appName.Trim())
-    
+
         $oQuery = new-object System.Management.ObjectQuery -ArgumentList $query
         $obectSearcher = new-object System.Management.ManagementObjectSearcher -ArgumentList $scope,$oQuery
-        $applicationFoundInCollection = $obectSearcher.Get()    
+        $applicationFoundInCollection = $obectSearcher.Get()
         $applicationFoundInCollectionEnumerator = $applicationFoundInCollection.GetEnumerator()
-    
+
         if($applicationFoundInCollectionEnumerator.MoveNext())
         {
             $returnValue = $applicationFoundInCollectionEnumerator.Current
-            $getResult = $returnValue.Get()        
+            $getResult = $returnValue.Get()
             $sdmPackageXml = $returnValue.Properties["SDMPackageXML"].Value.ToString()
             [Microsoft.ConfigurationManagement.ApplicationManagement.Serialization.SccmSerializer]::DeserializeFromString($sdmPackageXml)
         }
     }
-
 
      function Load-ConfigMgrAssemblies()
      {
@@ -616,16 +613,16 @@ function Set-CMApplicationXML {
             $ProgramFiles = 'C:\Program Files'
         }
          $AdminConsoleDirectory = "$ProgramFiles\Microsoft Configuration Manager\AdminConsole\bin"
-         $filesToLoad = "Microsoft.ConfigurationManagement.ApplicationManagement.dll","AdminUI.WqlQueryEngine.dll", "AdminUI.DcmObjectWrapper.dll" 
-     
+         $filesToLoad = "Microsoft.ConfigurationManagement.ApplicationManagement.dll","AdminUI.WqlQueryEngine.dll", "AdminUI.DcmObjectWrapper.dll"
+
          Set-Location $AdminConsoleDirectory
          [System.IO.Directory]::SetCurrentDirectory($AdminConsoleDirectory)
-     
+
           foreach($fileName in $filesToLoad)
           {
              $fullAssemblyName = [System.IO.Path]::Combine($AdminConsoleDirectory, $fileName)
              if([System.IO.File]::Exists($fullAssemblyName ))
-             {   
+             {
                  $FileLoaded = [Reflection.Assembly]::LoadFrom($fullAssemblyName )
              }
              else
@@ -641,9 +638,8 @@ function Set-CMApplicationXML {
 
     $applicationXML = Get-ApplicationObjectFromServer "$($ApplicationName)" $MPServer
 
-
     if ($applicationXML.DeploymentTypes -ne $null)
-        { 
+        {
             foreach ($a in $applicationXML.DeploymentTypes)
                 {
                     If ($OnFastNetwork) {
