@@ -16,7 +16,9 @@ If (Test-Path -Path 'D:\Program Files') {
 } Else {
     $ProgramFiles = 'C:\Program Files'
 }
-$ConfigMgrModules = "$ProgramFiles\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
+$InstallDir = "$ProgramFiles\Microsoft Configuration Manager"
+$ConfigMgrModules = "$InstallDir\AdminConsole\bin\ConfigurationManager.psd1"
+$LogDir = "\\usc.internal\usc\appdev\General\Logs"
 Import-Module $ConfigMgrModules
 $ErrorActionPreference = "Stop"
 $SiteCode = 'SC1'
@@ -31,8 +33,12 @@ $CompletedRoot = "\\usc.internal\usc\appdev\General\Packaging\CompletedPackages"
 $RetiredRoot = "\\usc.internal\usc\appdev\General\Packaging\RetiredPackages"
 
 #Select all packages to be imported
-Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName -Include @("*.sprj","*.appv","*.apppackage") -Recurse} | ForEach-Object {
-   
+Get-ChildItem -Path $PackageRoot | Where-Object {
+    Get-ChildItem -Path $_.FullName `
+        -Include @("*.sprj","*.appv","*.apppackage") `
+        -Recurse
+} | ForEach-Object {
+
     Set-Location C:
     #Get all the info about the package
     $SplitName = $_.Name -split "_"
@@ -45,7 +51,7 @@ Get-ChildItem -Path $PackageRoot | Where-Object {Get-ChildItem -Path $_.FullName
     $CustomGroup = $SplitName[6]
     $PackageName = "$Name $Version"
     $SourceFolder = $_
-    Start-Transcript -Path "\\usc.internal\usc\appdev\General\Logs\AppImport-$PackageName.log"
+    Start-Transcript -Path "$LogDir\$PackageName.log"
     #Verify Name
     If (-Not $Publisher) {
         Write-Host "Please specify a valid publisher"
