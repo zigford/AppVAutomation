@@ -72,7 +72,17 @@ function Get-Clause {
                 }
                 New-CMDetectionClauseFile @DetectCParams
             }
-        }   
+            KeyValue {
+                $DetectCParams = Add-ToHT $Clause.KeyValue
+                If ($Clause.Properties) {
+                    $DetectCParams['Value'] = [switch]$True
+                    $DetectCParams += Add-ToHT $Clause.Properties
+                } else {
+                    $DetectCParams['Existence'] = [switch]$True
+                }
+                New-CMDetectionClauseRegistryKeyValue @DetectCParams
+            }
+        }
     }
 
 }

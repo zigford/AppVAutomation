@@ -53,9 +53,10 @@ If ($LatestVersion -gt $NewestPackage.Version) {
         <UnArgs>/VERYSILENT /LOG=C:\Windows\AppLog\GitWinUninstall.log /NORESTARTM</UnArgs>
         <ConfigManager>
             <AddDetectionClause>
-                <DetectionClause Type="File">
-                    <File FileName="git.exe" 
-                        Path="C:\Program Files\Git\bin"
+                <DetectionClause Type="KeyValue">
+                    <KeyValue Hive="LocalMachine" 
+                        KeyName="Software\GitForWindows"
+                        ValueName="CurrentVersion"
                     />
                     <Properties PropertyType="Version"
                         ExpectedValue="$LatestVersion"
