@@ -38,7 +38,6 @@ If (Get-ChildItem -Path `$PackagePath *.appv) {
     Set-AppvXML -Path `$PackagePath -DisableObjects -StripComments
     Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse \\usc.internal\usc\appdev\General\Packaging\SourcePackages
 }
-Get-Date | Write-Output | OutFile \\usc.internal\usc\appdev\General\Packaging\VSCode.Package
 "@
 
     If ($PSCmdlet.ShouldProcess("$LatestVersion", "Create VSCode version ")) {
