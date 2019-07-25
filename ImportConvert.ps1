@@ -91,37 +91,6 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
         Write-Host -ForegroundColor Red $SourceFolder.FullName
         return
     }
-    #Does it need to be converted?
-    If ((Get-ChildItem -Path $SourceFolder.FullName -Filter *.sprj) -and (!(Test-Path -Path "$($SourceFolder.FullName)\APPV5"))) {
-        Write-Host -ForegroundColor Red "$Name needs to be converted first"
-        Write-Host -ForegroundColor Gray "Testing for conversion support"
-        If (Get-Module -List -Name AppvPkgConverter) {
-            Write-Host "Package conversion tools exist, testing and converting"
-            $Result = Test-AppvLegacyPackage -Path $SourceFolder.FullName
-            If ($Result.information -match "no major errors") {
-                Write-Host -ForegroundColor green "Package is ripe for conversion. Converting..."
-                $AppV5Path = New-Item -Path $PackageRoot -Name "$($SourceFolder.Name)-APPV5" -ItemType Directory -Force
-                $ConvertResult = ConvertFrom-AppvLegacyPackage -SourcePath $SourceFolder.FullName -DestinationPath $AppV5Path
-                If ($ConvertResult.Errors.Count -eq 0 -and $ConvertResult.Warnings.Count -eq 0) {
-                    Write-Host -ForegroundColor Green "Package Upgraded Succesfully"
-                    Write-Host -ForegroundColor Cyan "Retiring old APPV4 Package"
-                    Move-Item -Path $SourceFolder.FullName -Destination $RetiredRoot -Force
-                    Rename-Item -Path $AppV5Path.FullName $SourceFolder.Name
-                } Else {
-                    Write-Host -ForegroundColor Red "Package failed, aborting"
-                    $ConvertResult
-                    exit 1
-                }
-            } Else {
-                Write-Host -ForegroundColor red "Testing upgrade failed"
-                return $Result.Errors
-            }
-        } Else {
-            Write-Host -ForegroundColor Red "Packaging modules not found"
-            return
-        }
-    }
-#}
     #Create Package
     Write-Host -ForegroundColor Cyan "Checking application $Name"
     Get-ChildItem -Path $SourceFolder.FullName -Recurse | Where-Object {$_.BaseName -match ","} | ForEach-Object {Rename-Item -Path $_.FullName -NewName $_.Name.Replace(",","-")}
@@ -164,10 +133,10 @@ Get-ChildItem -Path $PackageRoot | Where-Object {
                 }
             }
         }
-                
+    }
     Start-Sleep -Seconds 10
     Set-Location SC1:\
-    
+
     #region ContentDistribution
     Try {
         Start-CMContentDistribution -Application (Get-CMApplication -Name $PackageName) -DistributionPointGroupName "Full Site" -EA SilentlyContinue
