@@ -1,13 +1,13 @@
 ﻿function Add-ToHT {
 <# Adds members of an object to a HashTable #>
-Param($Object) 
+Param($Object)
     $HT = @{}
     $Object | Get-Member -MemberType Property,NoteProperty | ForEach-Object {
         $Name = $_.Name
         $Value = $Object."$Name"
-        Switch ($Name) { 
+        Switch ($Name) {
             WhatIf  { $HT[$Name] = [switch]$True }
-            AddDetectionClause { $HT[$Name] = Get-Clauses $Value }
+            AddDetectionClause { $HT[$Name] = Get-Clause $Value }
             '#comment' {}
             Default { $HT[$Name] = $Value }
         }
@@ -41,15 +41,15 @@ Param($XML)
     return $SplatObj
 }
 
-function Get-Clauses {
+function Get-Clause {
     Param($Clauses)
 
     ForEach ($Clause in $Clauses.DetectionClause) {
         Switch ($Clause.Type) {
-            File { 
+            File {
                 $DetectCParams = Add-ToHT $Clause.File
                 If ($Clause.Properties) {
-                    $DetectCParams['Value'] = [switch]$True 
+                    $DetectCParams['Value'] = [switch]$True
                     $DetectCParams += Add-ToHT $Clause.Properties
                 } else {
                     $DetectCParams['Existence'] = [switch]$True
