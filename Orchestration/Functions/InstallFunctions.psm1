@@ -1,4 +1,42 @@
+<#
+
+Each supported package needs 2 functions
+1. Get-AppNameLatestVersion
+   This function returns a [Version] object of the latest version
+2. Get-AppNameDownloadLink
+   This function returns a URL from which to download a file
+
+#>
+
 #region Common
+
+<#
+    Functions commonly used to implement a package checker
+#>
+
+function Import-Settings {
+    $SettingsPath = "$(Split-Path -Path $PSScriptRoot -Parent)\settings.json"
+    If (-Not (Test-Path -Path $SettingsPath)) {
+        Write-Error "Unable to find $SettingsPath"
+    }
+    $Settings = Get-Content $SettingsPath -Raw | ConvertFrom-JSon
+    $Settings | Add-Member -MemberType NoteProperty -Name PackageName `
+        -Value (Get-PackageName $MyInvocation.ScriptName)
+    $Settings
+}
+
+function Get-PackageName {
+    Param($ScriptName)
+    #$PSScriptRoot
+    #Get-Variable
+    $ScriptFile = $ScriptName.Split('\')[-1]
+    $ScriptDir = $ScriptName.Split('\')[-2]
+    If ($ScriptFile -eq 'CheckPackage.ps1') {
+        return $ScriptDir
+    } else {
+        return $ScriptFile.TrimEnd('\.ps1')
+    }
+}
 
 function Get-OSArchitecture {
 [cmdletbinding()]
@@ -33,7 +71,8 @@ process {
 end {}            
 
 }
-Function Get-RedirectedUrl {
+
+function Get-RedirectedUrl {
 
     Param (
         [Parameter(Mandatory=$true)]
@@ -73,119 +112,114 @@ function Set-DefaultApp{
 
 }
 
+function New-SequencerScript {
+    Param(
+            [Parameter(Mandatory=$true)]$URL,
+            [array]$FixList,
+            [Parameter(Mandatory=$true)]$InstallScript,
+            $AppVTemplate="NONE",
+            $PreReq
+         )
+    $Version = Get-GenericLatestVersion -URL $URL
+    $PackageName = $Settings.PackageName
+    $SourcePath = Join-Path -Path $Settings.PackageQueue `
+        -ChildPath $Settings.PackageName
+    New-Item -ItemType Directory $SourcePath -Force
+    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
+        -Value $InstallScript -Force
+    If ($FixList) {
+        # Deposit the special module along with package source
+        Copy-Item "..\..\Functions\USC-APPV.psm1" $SourcePath
+        $FixList | ForEach-Object {
+            $_ | Out-File -Append (Join-Path -Path $SourcePath `
+                -ChildPath "FixList.txt")
+        }
+    }
+    If ($PreReq) {
+        New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
+            -Value $PreReq -Force
+    }
+
+@"
+
+Set-Location "`$HOME\Desktop"
+New-Item -ItemType Directory -Name Source
+Copy-Item -Path "$SourcePath" -Recurse Source
+Set-Location Source
+`$NewPackageName = "${PackageName}_${Version}_APPV_Open_USR"
+If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
+`$SequencerOptions = @{
+    Installer = '.\Install.bat'
+    OutputPath = "`$env:USERPROFILE\Desktop"
+    FullLoad = [switch]`$True
+    Name = `$NewPackageName
+}
+If ( "$AppVTemplate" -ne "NONE" ) {
+    `$SequencerOptions['TemplateFilePath'] = $AppVTemplate
+}
+
+New-AppvSequencerPackage @SequencerOptions
+If (Get-ChildItem -Path `$PackagePath *.appv) {
+    If (Test-Path "FixList.txt") {
+        Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
+        Get-Content "FixList.txt" | ForEach-Object {
+            Start-AppVFix -Path `$PackagePath -Fix `$_
+        }
+    }
+    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse $($Settings.PackageSource)
+}
+Remove-Item `$MyInvocation.MyCommand.Source
+Remove-Item -Recurse -Force "$SourcePath"
+"@ | Out-File (Join-Path -Path $Settings.PackageQueue `
+    -ChildPath "$($PackageName).ps1")
+}
+
+function Test-NewerPackageVersion {
+    Param (
+        [Parameter(Mandatory=$True)]$URL
+    )
+    (Get-GenericLatestVersion $URL) -gt (Get-VersionStringsFromPackages)
+}
+
+function Get-VersionStringsFromPackages {
+    [array]$VerList = [Version]'0.0.0.0'
+    Get-ChildItem -Path $Settings.PackageDest -Filter "$($Settings.PackageName)_*" |
+    ForEach-Object {
+        $VerString = $_.Name.Split('_')[2]
+        If ($VerString -match '\.') {
+            $VerList += New-Object System.Version ("{0:N2}" -f $VerString)
+        } Else {
+            $VerList += New-Object System.Version ("{0:N2}" -f [int]$VerString)
+        }
+    }
+    $VerList | Sort-Object | Select-Object -Last 1
+}
+
+function Get-GenericLatestVersion {
+    Param(
+            [Parameter(Mandatory=$True)]$URL
+         )
+    Invoke-WebRequest -Uri $url |
+    Select-Object -ExpandProperty Links | ForEach-Object {
+        [Version]$v = $null
+        $s = $_.href.TrimEnd('/')
+        if ([Version]::TryParse($s,[ref]$v)) {
+            $v
+        }
+    } | Sort-Object | Select-Object -Last 1
+} 
+
 #endregion
 
 #region FireFoxOnly
 
 function Get-FirefoxDownloadLink {
     $LatestPath = Get-RedirectedUrl "https://download.mozilla.org/?product=firefox-latest&os=win&lang=en-US"
-    #$LatestVersion = ((Invoke-WebRequest $LatestPath).Links | ?{$_.innerHTML -notmatch "stub" -and $_.innerHTML -match "exe"}).href
     return $LatestPath
 }
 
-function New-FireFoxAnswerFile {
-    Param($Version)
-    $AnswerINI = @"
-[Install]
-InstallDirectoryPath=C:\Program Files\Mozilla\Firefox
-QuickLaunchShortcut=false
-DesktopShortcut=false
-StartMenuShortcuts=true
-"@
+# TODO Get-FireFoxLatestVersion
 
-$AnswerINI
-
-}
-
-function New-MozillaConfigFile {
-    Param($Path)
-    If ( ! (Test-Path (Split-Path -Parent $Path))) {
-        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force
-    }
-    $Content = @"
-// Config Lockdown for USC
-lockPref("app.update.auto", false);
-lockPref("app.update.enabled", false);
-lockPref("app.update.service.enabled", false);
-lockPref("browser.shell.checkDefaultBrowser", false);
-"@
-
-    Set-Content -Value $Content -Path $Path -Force
-}
-
-function Enable-MozillaConfigFile {
-    param($InstallPath)
-    $LocalPrefsFile = Join-Path -Path $InstallPath -ChildPath "defaults\pref\local-settings.js"
-    If ( ! (Test-Path -Path (Split-Path -Path $LocalPrefsFile -Parent))) {
-        New-Item -ItemType Directory -Path (Split-Path -Path $LocalPrefsFile -Parent) -Force
-    }
-    $Content = @"
-pref("general.config.obscure_value", 0);
-pref("general.config.filename", "mozilla.cfg");
-"@
-
-    Set-Content -Path $LocalPrefsFile -Value $Content -Force
-}
-
-function New-MozillaPreference {
-    Param($Path)
-    If ( ! (Test-Path (Split-Path -Parent $Path))) {
-        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force
-    }
-    $Content = @"
-# Mozilla User Preferences
-
-/* Do not edit this file.
- *
- * If you make changes to this file while the application is running,
- * the changes will be overwritten when the application exits.
- *
- * To make a manual change to preferences, you can visit the URL about:config
- * For more information, see http://www.mozilla.org/unix/customizing.html#prefs
- */
-
-user_pref("app.update.auto", false);
-user_pref("app.update.enabled", false);
-user_pref("app.update.service.enabled",false);
-user_pref("browser.shell.checkDefaultBrowser", false);
-user_pref("network.proxy.type", 4);
-"@
-    Set-Content -Path $Path -Value $Content -Force
-}
-
-function New-MozillaUIMod {
-    Param($Path)
-    If ( ! (Test-Path (Split-Path -Parent $Path))) {
-        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force
-    }
-    $Content = @"
-/* UserChrome.css for Mozilla Firefox */
-/* Remove access to user interface elements that aren't suitable for application virtualization */
-
-
-/* Options - Advanced - General - System Defaults */
-#systemDefaultsGroup { display: none !important; }
-
-/* Options / Advanced / Updates / Firefox checkbox */
-#aboutDialog,#updateTab {display: none !important;}
-/* - Depreciated #enableAppUpdate { display: none !important; } - */
-
-/* Help - About - Check for Updates button */
-#updateButton { display: none !important; }
-"@
-    Set-Content -Path $Path -Value $Content -Force
-}
-
-function Install-FireFoxExtension {
-    Param($Path,$FireFoxPath)
-    If ((Test-Path -Path $FireFoxPath) -and (Test-Path -Path $Path)) {
-        $ExtName = (Get-Item -Path $Path).Name
-        $InstallExtension = New-Item -Force -ItemType Directory -Path "$FireFoxPath\InstallExtension"
-        Copy-Item $Path $InstallExtension -Recurse
-        $ExtReg = New-Item -Path "HKLM:\Software\Wow6432Node\Mozilla\Firefox\extensions" -Force
-        New-ItemProperty -Path $ExtReg.PSPath -Name $ExtName -Value "$InstallExtension\$ExtName"
-    }
-}
 #endregion
 
 #region JavaOnly
@@ -196,28 +230,7 @@ function Get-JavaDownloadLink {
     return $LatestVersion.href
 }
 
-function Disable-JavaUpdates {
-    $AllJavaReg = Get-ChildItem 'HKLM:\SOFTWARE\JavaSoft\Java Runtime Environment' | ForEach-Object {$_.PSChildName}
-    Foreach ( $JavaVersion in $AllJavaReg ) { 
-        $JRegPaths = "HKLM:\SOFTWARE\JavaSoft\Java Runtime Environment\$($JavaVersion)\MSI", "HKLM:\SOFTWARE\WoW6432Node\JavaSoft\Java Runtime Environment\$($JavaVersion)\MSI"
-        Foreach ( $JRegPath in $JRegPaths ) {
-            If (Test-Path $JRegPath) {
-                Set-ItemProperty -Path $JRegPath -Name AUTOUPDATECHECK -Value 0 -Force
-                Set-ItemProperty -Path $JRegPath -Name JAVAUPDATE -Value 0 -Force
-            }
-        }
-    }
-    $JRegPaths = "HKLM:\SOFTWARE\JavaSoft", "HKLM:\SOFTWARE\WoW6432Node\JavaSoft"
-    Foreach ( $JRegPath in $JRegPaths ) {
-        If (Test-Path $JRegPath) {
-            If ( ! (Test-Path ($JRegPath + "\Java Update\Policy")) ) {
-                New-Item -Path ($JRegPath + "\Java Update\Policy") -Force
-            }
-            New-ItemProperty -Path ($JRegPath + "\Java Update\Policy") -Name EnableJavaUpdate -Type DWORD -Value 0 -Force
-            New-ItemProperty -Path ($JRegPath + "\Java Update\Policy") -Name NotifyDownload -Type DWORD -Value 0 -Force
-        }
-    }
-}
+# TODO Get-JavaLatestVersion
 
 #endregion
 
@@ -229,14 +242,8 @@ function Get-FlashDownloadLink {
     return $LatestVersion.href
 }
 
-function Disable-FlashUpdates {
-    $FlashPaths = "$env:WinDir\System32\Macromed\Flash", "$env:WinDir\SysWOW64\Macromed\Flash"
-    Foreach ($FlashPath in $FlashPaths) {
-        If (Test-Path $FlashPath) {
-            Set-Content -Path ($FlashPath + "\mms.cfg") -Value "AutoUpdateDisable=1"
-        }
-    }    
-}
+# TODO Get-FlashLatestVersion
+
 #endregion
 
 #region VSCodeOnly
@@ -259,7 +266,6 @@ function Get-VSCodeLatestVersion {
 
 function Get-PowerBIDownloadLink {
     $LatestPath = Get-RedirectedUrl 'https://go.microsoft.com/fwlink/?LinkId=521662&clcid=0x409'
-    #$LatestVersion = ((Invoke-WebRequest $LatestPath).Links | ?{$_.innerHTML -notmatch "stub" -and $_.innerHTML -match "exe"}).href
     return $LatestPath
 }
 
@@ -353,7 +359,7 @@ function Get-PythonReleaseVersions {
     }
 }
 
-function Get-PythonLatestProdVersion {
+function Get-PythonLatestVersion {
     [CmdLetBinding()]
     Param()
     $Versions = Get-PythonReleaseVersions | Sort-Object -Descending
@@ -376,7 +382,7 @@ function Get-PythonLatestProdVersion {
     return $Versions[$CheckVer-1]
 }
 
-function Get-PythonLatestDownloadUrl {
+function Get-PythonDownloadLink {
     Param($Version)
     $v=$Version.ToString()
     return "https://www.python.org/ftp/python/$v/python-${v}-amd64.exe"
@@ -384,7 +390,7 @@ function Get-PythonLatestDownloadUrl {
 #endregion
 
 #region VLC
-function Get-VLCDownloadURL {
+function Get-VLCDownloadLink {
     Param([ValidateSet(
                 'MSI',
                 'EXE',
