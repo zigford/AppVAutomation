@@ -20,19 +20,16 @@ Param()
 #
 #     
 Import-Module '..\..\Functions\InstallFunctions.psm1'
-$Settings = Import-Settings
-$URL = 'http://download.videolan.org/pub/videolan/vlc'
-
-If (Test-NewerPackageVersion $URL) {
-    $LatestVersion = Get-GenericLatestVersion -URL $URL
-    "Ready to upgrade to $LatestVersion, staging queue"
-    $PackageOptions = @{
-        InstallScript = 'start /wait msiexec.exe /I "<DLFILE>" /qb REBOOT=REALLYSUPPRESS'
-        FixList = "DisableObjects"
-        PreReq = 'notepad.exe'
-        URL = $URL
-        AppVTemplate = 'vlc.appvt'
-    }
-    New-SequencerScript @PackageOptions
+Import-Settings | Set-Variable Settings
+$PackageProperties = @{
+    Settings = $Settings
+    InstallScript = 'start /wait msiexec.exe /I "<DLFILE>" /qb REBOOT=REALLYSUPPRESS'
+    FixList = "DisableObjects"
+    PreReq = 'notepad.exe'
+    URL = 'http://download.videolan.org/pub/videolan/vlc'
+    URLFunction = 'Get-VLCDownloadLink -Type MSI'
 }
+
+$PackageProperties | Test-NewerPackageVersion | New-SequencerScript
+
 Remove-Module InstallFunctions

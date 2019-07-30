@@ -91,19 +91,20 @@ function Get-RedirectedUrl {
 
 function Get-DownloadFromLink {
     [CmdLetBinding(SupportsShouldProcess)]
-    Param($Link,$Outpath,$Outfile)
+    Param($Link,$OutPath,$Outfile)
     If (!$Outfile) {
         $Outfile = ($Link.Split("/") | Select -Last 1).Replace('%20',' ')
     }
-    $Output = "$Outpath\$Outfile"
+    $Output = Join-Path -Path $OutPath -ChildPath $Outfile
+    If (Test-Path $Output) { return (Get-Item $Output) }
     If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
         Invoke-WebRequest -Uri $Link -OutFile $Output -UseBasicParsing
         $OutFile = Get-Item -Path $Output
         If ($OutFile) {
-            Write-Host -ForegroundColor Green "Download Success"
+            Write-Information "Download Success"
             return $OutFile
         } Else {
-            Write-Host -ForegroundColor Red "Download Failed"
+            Write-Error "Download Failed"
         }
     }
 }
@@ -112,33 +113,53 @@ function Set-DefaultApp{
 
 }
 
+function New-PackageName {
+    Param([Parameter(Mandatory=$True)]$Properties)
+    $PackageName = $Properties.Settings.PackageName
+    return ("{0}_{1}_{2}_{3}_{4}_{5}" -f
+            (Get-AppVendor $PackageName),
+            (Get-AppName $PackageName),
+            $Properties.Version,
+            "APPV",
+            (Get-AppLicense $PackageName),
+            (Get-AppTarget $PackageName)
+    )
+}
+
 function New-SequencerScript {
     Param(
-            [Parameter(Mandatory=$true)]$URL,
-            [array]$FixList,
-            [Parameter(Mandatory=$true)]$InstallScript,
-            $AppVTemplate="NONE",
-            $PreReq
+            [Parameter(ValueFromPipeline)]$Properties
          )
-    $Version = Get-GenericLatestVersion -URL $URL
-    $PackageName = $Settings.PackageName
-    $SourcePath = Join-Path -Path $Settings.PackageQueue `
-        -ChildPath $Settings.PackageName
+    $Properties['Version'] = Get-LatestVersionFromURL -URL $Properties.URL
+    $PackageName = New-PackageName -Properties $Properties
+    $PackageSource = $Properties.Settings.PackageSource
+    $PackageQueue = $Properties.Settings.PackageQueue
+    $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
     New-Item -ItemType Directory $SourcePath -Force
-    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
-        -Value $InstallScript -Force
-    If ($FixList) {
+
+    If ($Properties.FixList) {
         # Deposit the special module along with package source
         Copy-Item "..\..\Functions\USC-APPV.psm1" $SourcePath
-        $FixList | ForEach-Object {
+        $Properties.FixList | ForEach-Object {
             $_ | Out-File -Append (Join-Path -Path $SourcePath `
                 -ChildPath "FixList.txt")
         }
     }
-    If ($PreReq) {
+    If ($Properties.PreReq) {
         New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
-            -Value $PreReq -Force
+            -Value $Properties.PreReq -Force
     }
+
+    If ($Properties.URLFunction) {
+        $Link = Invoke-Expression $Properties.URLFunction
+    } else {
+        ## ToDo Implement Generic URL Downloader
+    }
+    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
+        -Link $Link
+    $InstallScript = $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
+    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
+        -Value $InstallScript -Force
 
 @"
 
@@ -146,7 +167,10 @@ Set-Location "`$HOME\Desktop"
 New-Item -ItemType Directory -Name Source
 Copy-Item -Path "$SourcePath" -Recurse Source
 Set-Location Source
-`$NewPackageName = "${PackageName}_${Version}_APPV_Open_USR"
+`$NewPackageName = "$PackageName"
+If (Test-Path -Path `$NewPackageName) {
+    Set-Location `$NewPackageName
+}
 If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
 `$SequencerOptions = @{
     Installer = '.\Install.bat'
@@ -154,8 +178,9 @@ If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
     FullLoad = [switch]`$True
     Name = `$NewPackageName
 }
-If ( "$AppVTemplate" -ne "NONE" ) {
-    `$SequencerOptions['TemplateFilePath'] = $AppVTemplate
+`$AppVTemplate = Get-ChildItem -Filter *.appvt
+If ( `$AppVTemplate ) {
+    `$SequencerOptions['TemplateFilePath'] = `$(`$AppVTemplate.FullName)
 }
 
 New-AppvSequencerPackage @SequencerOptions
@@ -166,24 +191,51 @@ If (Get-ChildItem -Path `$PackagePath *.appv) {
             Start-AppVFix -Path `$PackagePath -Fix `$_
         }
     }
-    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse $($Settings.PackageSource)
+    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse $PackageSource
 }
 Remove-Item `$MyInvocation.MyCommand.Source
 Remove-Item -Recurse -Force "$SourcePath"
-"@ | Out-File (Join-Path -Path $Settings.PackageQueue `
+"@ | Out-File (Join-Path -Path $PackageQueue `
     -ChildPath "$($PackageName).ps1")
 }
 
 function Test-NewerPackageVersion {
     Param (
-        [Parameter(Mandatory=$True)]$URL
+        [Parameter(ValueFromPipeline=$True)]$Options
     )
-    (Get-GenericLatestVersion $URL) -gt (Get-VersionStringsFromPackages)
+    If (
+        (Get-LatestVersionFromURL $Options.URL) -gt 
+        (Get-LatestVersionFromPackages $Options.Settings.PackageName)
+       ) {
+        return $Options
+    }
 }
 
-function Get-VersionStringsFromPackages {
+function Get-AppVendor {
+    Param($FullName)
+    return $FullName.Split('_')[0]
+}
+
+function Get-AppName {
+    Param($FullName)
+    return $FullName.Split('_')[1]
+}
+
+function Get-AppLicense {
+    Param($FullName)
+    return $FullName.Split('_')[4]
+}
+
+function Get-AppTarget {
+    Param($FullName)
+    return $FullName.Split('_')[5]
+}
+
+function Get-LatestVersionFromPackages {
+    Param($PackageName)
     [array]$VerList = [Version]'0.0.0.0'
-    Get-ChildItem -Path $Settings.PackageDest -Filter "$($Settings.PackageName)_*" |
+    $VendorAndName = "$(Get-AppVendor $PackageName)_$(Get-AppName $PackageName)"
+    Get-ChildItem -Path $Settings.PackageDest -Filter "${VendorAndName}_*" |
     ForEach-Object {
         $VerString = $_.Name.Split('_')[2]
         If ($VerString -match '\.') {
@@ -195,7 +247,7 @@ function Get-VersionStringsFromPackages {
     $VerList | Sort-Object | Select-Object -Last 1
 }
 
-function Get-GenericLatestVersion {
+function Get-LatestVersionFromURL {
     Param(
             [Parameter(Mandatory=$True)]$URL
          )
@@ -416,4 +468,10 @@ function Get-VLCLatestVersion {
     }
 }
 
+function Test-NewerVLCVersion {
+    Param (
+        [Parameter(Mandatory=$True)]$URL
+    )
+    (Get-VLCLatestVersion $URL) -gt (Get-VersionStringsFromPackages)
+}
 #endregion
