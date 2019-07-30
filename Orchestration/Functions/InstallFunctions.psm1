@@ -157,7 +157,8 @@ function New-SequencerScript {
     }
     $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
         -Link $Link
-    $InstallScript = $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
+    $InstallScript = "cd `"%~dp0`"`n"
+    $InstallScript += $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
     New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
         -Value $InstallScript -Force
 
@@ -184,14 +185,14 @@ If ( `$AppVTemplate ) {
 }
 
 New-AppvSequencerPackage @SequencerOptions
-If (Get-ChildItem -Path `$PackagePath *.appv) {
+If (Get-ChildItem -Path `$SequencerOptions.OutputPath *.appv) {
     If (Test-Path "FixList.txt") {
         Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
         Get-Content "FixList.txt" | ForEach-Object {
             Start-AppVFix -Path `$PackagePath -Fix `$_
         }
     }
-    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse $PackageSource
+    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse "$PackageSource"
 }
 Remove-Item `$MyInvocation.MyCommand.Source
 Remove-Item -Recurse -Force "$SourcePath"

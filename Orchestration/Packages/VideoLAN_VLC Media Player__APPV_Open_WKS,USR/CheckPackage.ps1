@@ -24,8 +24,8 @@ Import-Settings | Set-Variable Settings
 $PackageProperties = @{
     Settings = $Settings
     InstallScript = 'start /wait msiexec.exe /I "<DLFILE>" /qb REBOOT=REALLYSUPPRESS'
-    FixList = "DisableObjects"
-    PreReq = 'notepad.exe'
+    <# FixList = "DisableObjects" -- Example #>
+    <# PreReq = 'notepad.exe' -- Example #>
     URL = 'http://download.videolan.org/pub/videolan/vlc'
     URLFunction = 'Get-VLCDownloadLink -Type MSI'
 }
