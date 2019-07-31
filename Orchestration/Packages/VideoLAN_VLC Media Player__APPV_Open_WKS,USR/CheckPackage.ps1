@@ -23,7 +23,11 @@ Import-Module "$PSScriptRoot\..\..\Functions\InstallFunctions.psm1"
 Import-Settings | Set-Variable Settings
 $PackageProperties = @{
     Settings = $Settings
-    InstallScript = 'start /wait msiexec.exe /I "<DLFILE>" /qb REBOOT=REALLYSUPPRESS'
+    InstallScript = 
+@'
+start /wait msiexec.exe /I "<DLFILE>" /qb REBOOT=REALLYSUPPRESS'
+del "C:\Users\Public\Desktop\VLC media player.lnk"
+'@
     <# FixList = "DisableObjects" -- Example #>
     <# PreReq = 'notepad.exe' -- Example #>
     URL = 'http://download.videolan.org/pub/videolan/vlc'
