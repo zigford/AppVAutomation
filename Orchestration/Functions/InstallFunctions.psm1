@@ -185,7 +185,7 @@ If ( `$AppVTemplate ) {
 }
 
 New-AppvSequencerPackage @SequencerOptions
-If (Get-ChildItem -Path `$SequencerOptions.OutputPath *.appv) {
+If (Get-ChildItem -Path "$($SequencerOptions.OutputPath)" *.appv) {
     If (Test-Path "FixList.txt") {
         Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
         Get-Content "FixList.txt" | ForEach-Object {
