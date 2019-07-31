@@ -265,7 +265,10 @@ function Get-LatestVersionFromURL {
 } 
 
 function Start-VMSequencer {
-    Param($PackageName)
+    [CmdLetBinding()]
+    Param([Parameter(ValueFromPipeline=$True)]$PackageName)
+
+    Write-Verbose "Running startvm sequencer for $PackageName"
     $Working = Split-Path -Path $PSScriptRoot -Parent
     & (Join-Path -Path $Working -ChildPath PackageOrchestrator.ps1) -Build -PackageName $PackageName
 }
