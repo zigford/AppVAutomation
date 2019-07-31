@@ -198,6 +198,8 @@ Remove-Item `$MyInvocation.MyCommand.Source
 Remove-Item -Recurse -Force "$SourcePath"
 "@ | Out-File (Join-Path -Path $PackageQueue `
     -ChildPath "$($PackageName).ps1")
+
+    return $PackageName
 }
 
 function Test-NewerPackageVersion {
@@ -261,6 +263,12 @@ function Get-LatestVersionFromURL {
         }
     } | Sort-Object | Select-Object -Last 1
 } 
+
+function Start-VMSequencer {
+    Param($PackageName)
+    $Working = Split-Path -Path $PSScriptRoot -Parent
+    & (Join-Path -Path $Working -ChildPath PackageOrchestrator.ps1) -Build -PackageName $PackageName
+}
 
 #endregion
 
