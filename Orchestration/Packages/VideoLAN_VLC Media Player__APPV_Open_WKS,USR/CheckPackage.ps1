@@ -19,7 +19,7 @@ Param()
 #     exists, or if the current version is still the latest
 #
 #     
-Import-Module '..\..\Functions\InstallFunctions.psm1'
+Import-Module "$PSScriptRoot\..\..\Functions\InstallFunctions.psm1"
 Import-Settings | Set-Variable Settings
 $PackageProperties = @{
     Settings = $Settings
