@@ -234,11 +234,18 @@ function Get-AppTarget {
     return $FullName.Split('_')[5]
 }
 
+function New-PackageDirFilter {
+    Param($PackageName)
+
+    return "$(Get-AppVendor $PackageName)_$(Get-AppName $PackageName)_*"
+
+}
+
 function Get-LatestVersionFromPackages {
     Param($PackageName)
     [array]$VerList = [Version]'0.0.0.0'
-    $VendorAndName = "$(Get-AppVendor $PackageName)_$(Get-AppName $PackageName)"
-    Get-ChildItem -Path $Settings.PackageDest -Filter "${VendorAndName}_*" |
+    Get-ChildItem -Path $Settings.PackageDest `
+        -Filter (New-PackageDirFilter $PackageName) |
     ForEach-Object {
         $VerString = $_.Name.Split('_')[2]
         If ($VerString -match '\.') {
