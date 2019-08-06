@@ -529,4 +529,27 @@ function Test-NewerVLCVersion {
 }
 #endregion
 
+#region Zoom
+
+function Get-ZoomClientDownloadLink {
+    Param([ValidateSet('MSI','EXE')]$Type)
+
+    $userAgent = 'Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6'
+    $url = 'https://zoom.us/download'
+    $WebObject = Invoke-WebRequest -Uri $url -UserAgent $userAgent
+    $relativeLink = $WebObject.Links | Where-Object {
+        $_ -match "ZoomInstallerFull.$Type"
+    } | Select-Object -ExpandProperty href
+    return "${url}${relativeLink}"
+}
+
+function Get-ZoomClientLatestVersion {
+    $userAgent = 'Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6'
+    $url = 'https://zoom.us/download'
+    $WebObject = Invoke-WebRequest -Uri $url -UserAgent $userAgent
+}
+
+#endregion
+
+
 Export-ModuleMember *
