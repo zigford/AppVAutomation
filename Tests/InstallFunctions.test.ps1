@@ -2,19 +2,73 @@ $OrchestrationDir = (Join-Path -Path (Split-Path $PSScriptRoot -Parent) -ChildPa
 $FunctionsDir = (Join-Path $OrchestrationDir -ChildPath "Functions")
 $InstallFunctions = (Join-Path -Path $FunctionsDir -ChildPath "InstallFunctions.psm1")
 
-Import-Module $InstallFunctions
+Get-Module InstallFunctions | Remove-Module
+Import-Module $InstallFunctions -Force
 Import-Module Pester
 
 $TestPackageName =  'VideoLAN_VLC Media Player__APPV_Open_WKS,USR'
 $TestPackageProperties = @{
     Settings = @{
-        PackageName = 'VideoLAN_VLC Media Player__APPV_Open_WKS,USR'
-        PackageSource = "${env:temp}\PackageSource"
-        PackageQueue = "${env:temp}\PackageQueue"
+        PackageName = $TestPackageName
+        PackageSource = "C:\PackageSource"
+        PackageQueue = "C:\PackageQueue"
+        PackageDest = "C:\PackageDest"
     }
     URL = 'http://download.videolan.org/pub/videolan/vlc'
     InstallScript = 'Nothing'
     URLFunction = 'Get-VLCDownloadLink -Type MSI'
+}
+
+Mock -ModuleName InstallFunctions Import-Settings {
+    return @{
+        PackageDest = 'PackageDest'
+        PackageName = 'VideoLAN_VLC Media Player__APPV_Open_WKS,USR' 
+    }
+}
+
+Describe "Import-Settings" {
+    Context "Import-Settings is mocked" {
+        It "imports settings" {
+            Mock Import-Settings {
+                $TestPackageProperties.Settings
+            }
+            $Settings = Import-Settings
+            Assert-MockCalled Import-Settings -Times 1
+            $Settings.PackageDest | Should -BeExactly `
+                $TestPackageProperties.Settings.PackageDest
+        }
+    }
+}
+
+Describe "Get-DestDir" {
+    Context "Import settings mocked to testpackageproperties" {
+
+        $DestDir = Get-DestDir
+        It "calls Import Settings" {
+            Assert-MockCalled -ModuleName InstallFunctions Import-Settings `
+                -Times 1
+        }
+
+        It "returns packagedest directory" {
+            $DestDir | Should -Be "PackageDest"
+        }
+    }
+}
+
+Describe "Get-PackageDestDir" {
+    Context "When PackageType is APPV" {
+
+        $PackageDestDir = Get-PackageDestDir -PackageType APPV
+
+        It "makes a call to import-settings" {
+            Assert-MockCalled -ModuleName InstallFunctions `
+                Import-Settings -Times 1
+        }
+
+        It "returns a full path to where APPV packages end up" {
+            $PackageDestDir | Should -Match 'PackageDest(/|\\)APPV5Packages'
+        } 
+    }
 }
 
 Describe "Get-LatestVersionFromPackages" {
@@ -31,7 +85,7 @@ Describe "Get-LatestVersionFromPackages" {
         It "reads a directory of packages" {
 
             Get-LatestVersionFromPackages -PackageName $TestPackageName
-
+            Assert-MockCalled Import-Settings -Times 1 -ModuleName InstallFunctions
             Assert-MockCalled Get-ChildItem -Times 1 -ModuleName InstallFunctions
         }
         It "returns the latest package version" {
@@ -43,12 +97,19 @@ Describe "Get-LatestVersionFromPackages" {
     }
 }
 
-Describe "New-PackageDirFilter" {
-    It "transforms a packge name to a filter to find all package versions" {
-        New-PackageDirFilter -PackageName $TestPackageName |
-        Should be 'VideoLAN_VLC Media Player_*'
+Describe "New-PackageDirAndFilter" {
+    Context "Mock Import-Settings to return fake settings" {
+
+        It "returns a hashtable for splatting at gci" {
+            $Result = New-PackageDirAndFilter -PackageName $TestPackageName
+            $Result.Filter | Should -Be 'VideoLAN_VLC Media Player_*'
+            $Result.Path | Should -BeExactly (
+                    Join-Path "PackageDest" -ChildPath 'APPV5Packages'
+            )
+        }
     }
 }
+
 
 Describe "Select-NewerPackageVersion" {
 
@@ -61,6 +122,7 @@ Describe "Select-NewerPackageVersion" {
                 ForEach-Object { New-Object System.IO.DirectoryInfo($_) }
             )
         }
+
 
         It "Selects package when available online is newer" {
             Select-NewerPackageVersion $TestPackageProperties | Should BeExactly $TestPackageProperties
@@ -93,6 +155,7 @@ Describe "New-SequencerScript" {
     Context 'Properties is a valid package properties' {
         Mock -ModuleName InstallFunctions New-Item {}
         Mock -ModuleName InstallFunctions Out-File {}
+        Mock -ModuleName InstallFunctions Join-Path {return "fake.file"}
         Mock -ModuleName InstallFunctions Invoke-WebRequest {}
         Mock -ModuleName InstallFunctions Get-Item {([System.IO.FileInfo]'file.exe')}
         It "returns a package name for the sequencer to begin sequencing" {
@@ -105,8 +168,12 @@ Describe "New-SequencerScript" {
         }
 
     }
-        
 }
 
-
-Remove-Module InstallFunctions
+Describe "Start-VMSequencer" {
+    Context 'PackageName is null' {
+        It "Should return without doing anything when nothing in pipeline" {
+            $null | Start-VMSequencer | Should -BeExactly $null
+        }
+    }
+}

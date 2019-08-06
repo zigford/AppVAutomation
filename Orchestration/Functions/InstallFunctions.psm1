@@ -208,9 +208,10 @@ function Select-NewerPackageVersion {
     Param (
         [Parameter(ValueFromPipeline=$True)]$Options
     )
-    $VerbosePreference='Continue'
-        $URLVer = Get-LatestVersionFromURL $Options.URL
-        $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
+
+    $URLVer = Get-LatestVersionFromURL $Options.URL
+    $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
+
     If ( $URLVer -gt $LocalVer) {
         Write-Verbose ("$URLVer newer than $LocalVer of {0}" -f `
             $Options.Settings.PackageName)
@@ -242,18 +243,21 @@ function Get-AppTarget {
     Param($FullName)
     return $FullName.Split('_')[5]
 }
+function Get-DestDir {
+    return (Import-Settings).PackageDest
+}
 
 function Get-PackageDestDir {
     Param($PackageType)
 
-    $Settings = Import-Settings
-    $ChildPath = Switch ($PackageType) {
+    $SubDir = Switch ($PackageType) {
         APPV {'APPV5Packages'}
         MSI {'MSI'}
         EXE {'EXE'}
         Script {'Script'}
     }
-    Join-Path $Settings.PackageDest -ChildPath $ChildPath
+    $DestDir = Get-DestDir
+    return Join-Path -Path $DestDir -ChildPath $SubDir
 }
 
 function New-PackageDirAndFilter {
@@ -524,3 +528,5 @@ function Test-NewerVLCVersion {
     (Get-VLCLatestVersion $URL) -gt (Get-VersionStringsFromPackages)
 }
 #endregion
+
+Export-ModuleMember *
