@@ -89,6 +89,15 @@ function Get-RedirectedUrl {
     }
 }
 
+function Get-VersionFromString {
+    Param($String)
+    If ($String -match '(?<version>\d+\.\d+(\d+|\.)+)') {
+        return [Version]$Matches['version']
+    } else {
+        return [Version]'0.0.0.0'
+    }
+}
+
 function Get-DownloadFromLink {
     [CmdLetBinding(SupportsShouldProcess)]
     Param($Link,$OutPath,$Outfile)
@@ -544,9 +553,24 @@ function Get-ZoomClientDownloadLink {
 }
 
 function Get-ZoomClientLatestVersion {
+    Param($ClientFilter='Zoom Client for Meetings')
     $userAgent = 'Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6'
     $url = 'https://zoom.us/download'
     $WebObject = Invoke-WebRequest -Uri $url -UserAgent $userAgent
+    $Strings = $WebObject -replace "`n","" -split "<.*?>" | Where-Object {
+        $_ -match "^Zoom\s.*(Client|Plugin|Rooms)" -or $_ -match "^Version"
+    }
+    $ClientsAndVersions = $Strings | ForEach-Object {
+        If ($_ -match 'Zoom' -and $Strings[$Index+1] -match 'Version') {
+            [PSCustomObject]@{
+                Client = $_
+                Version = Get-VersionFromString $Strings[$Index+1]
+            }
+        }
+        $Index ++
+    }
+    $ClientsAndVersions | Where-Object {$_.Client -match $ClientFilter} |
+    Select-Object -ExpandProperty Version
 }
 
 #endregion
