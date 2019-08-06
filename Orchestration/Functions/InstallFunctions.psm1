@@ -130,6 +130,7 @@ function New-SequencerScript {
     Param(
             [Parameter(ValueFromPipeline)]$Properties
          )
+    If ($Properties -eq $Null) {return}
     $Properties['Version'] = Get-LatestVersionFromURL -URL $Properties.URL
     $PackageName = New-PackageName -Properties $Properties
     $PackageSource = $Properties.Settings.PackageSource
