@@ -202,14 +202,15 @@ Remove-Item -Recurse -Force "$SourcePath"
     return $PackageName
 }
 
-function Test-NewerPackageVersion {
+function Select-NewerPackageVersion {
     Param (
         [Parameter(ValueFromPipeline=$True)]$Options
     )
-    If (
-        (Get-LatestVersionFromURL $Options.URL) -gt 
-        (Get-LatestVersionFromPackages $Options.Settings.PackageName)
-       ) {
+        $URLVer = Get-LatestVersionFromURL $Options.URL
+        $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
+    If ( $URLVer -gt $LocalVer) {
+        Write-Verbose ("$URLVer newer than $LocalVer of {0}" -f `
+            $Options.Settings.PackageName)
         return $Options
     }
 }

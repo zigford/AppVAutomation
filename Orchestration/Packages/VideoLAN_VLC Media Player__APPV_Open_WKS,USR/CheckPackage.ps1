@@ -35,7 +35,7 @@ del "C:\Users\Public\Desktop\VLC media player.lnk"
     URLFunction = 'Get-VLCDownloadLink -Type MSI'
 }
 
-$PackageProperties | Test-NewerPackageVersion | New-SequencerScript |
+$PackageProperties | Select-NewerPackageVersion | New-SequencerScript |
 Start-VMSequencer
 
 Remove-Module InstallFunctions
