@@ -51,21 +51,18 @@ Function Get-RedirectedUrl {
 }
 
 function Get-DownloadFromLink {
-    [CmdLetBinding(SupportsShouldProcess)]
     Param($Link,$Outpath,$Outfile)
     If (!$Outfile) {
         $Outfile = ($Link.Split("/") | Select -Last 1).Replace('%20',' ')
     }
     $Output = "$Outpath\$Outfile"
-    If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
-        Invoke-WebRequest -Uri $Link -OutFile $Output -UseBasicParsing
-        $OutFile = Get-Item -Path $Output
-        If ($OutFile) {
-            Write-Host -ForegroundColor Green "Download Success"
-            return $OutFile
-        } Else {
-            Write-Host -ForegroundColor Red "Download Failed"
-        }
+    Invoke-WebRequest -Uri $Link -OutFile $Output -UseBasicParsing
+    $OutFile = Get-Item -Path $Output
+    If ($OutFile) {
+        Write-Host -ForegroundColor Green "Download Success"
+        return $OutFile
+    } Else {
+        Write-Host -ForegroundColor Red "Download Failed"
     }
 }
 
@@ -381,33 +378,4 @@ function Get-PythonLatestDownloadUrl {
     $v=$Version.ToString()
     return "https://www.python.org/ftp/python/$v/python-${v}-amd64.exe"
 }
-#endregion
-
-#region VLC
-function Get-VLCDownloadURL {
-    Param([ValidateSet(
-                'MSI',
-                'EXE',
-                'ZIP',
-                '7Z'
-                )
-        ][Parameter(Mandatory=$True)]$Type
-    )
-    $url = 'http://download.videolan.org/pub/videolan/vlc/last/win64'
-    $page = Invoke-WebRequest -Uri $url
-    $hostedFile = $page.Links.href |
-    Where-Object { $_ -match "-win64\.$Type$"}
-    return "$url/$hostedFile"
-}
-
-function Get-VLCLatestVersion {
-    [CmdLetBinding()]
-    $DownloadURL = Get-VLCDownloadURL -Type MSI
-    [Version]$v = $null
-    $s = ([regex]'(\d+\.\d+\.\d+(\.\d+|))').Matches($DownloadURL).Value
-    if ([Version]::TryParse($s,[ref]$v)) {
-        $v
-    }
-}
-
 #endregion
