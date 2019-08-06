@@ -204,9 +204,11 @@ Remove-Item -Recurse -Force "$SourcePath"
 }
 
 function Select-NewerPackageVersion {
+    [CmdLetBinding()]
     Param (
         [Parameter(ValueFromPipeline=$True)]$Options
     )
+    $VerbosePreference='Continue'
         $URLVer = Get-LatestVersionFromURL $Options.URL
         $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
     If ( $URLVer -gt $LocalVer) {
@@ -226,6 +228,11 @@ function Get-AppName {
     return $FullName.Split('_')[1]
 }
 
+function Get-AppType {
+    Param($FullName)
+    return $FullName.Split('_')[3]
+}
+
 function Get-AppLicense {
     Param($FullName)
     return $FullName.Split('_')[4]
@@ -236,18 +243,39 @@ function Get-AppTarget {
     return $FullName.Split('_')[5]
 }
 
-function New-PackageDirFilter {
+function Get-PackageDestDir {
+    Param($PackageType)
+
+    $Settings = Import-Settings
+    $ChildPath = Switch ($PackageType) {
+        APPV {'APPV5Packages'}
+        MSI {'MSI'}
+        EXE {'EXE'}
+        Script {'Script'}
+    }
+    Join-Path $Settings.PackageDest -ChildPath $ChildPath
+}
+
+function New-PackageDirAndFilter {
+    [CmdLetBinding()]
     Param($PackageName)
 
-    return "$(Get-AppVendor $PackageName)_$(Get-AppName $PackageName)_*"
-
+    $GCIParams = @{
+        Filter = ("{0}_{1}_*" -f `
+            (Get-AppVendor $PackageName),
+            (Get-AppName $PackageName)
+        )
+        Path = Get-PackageDestDir (Get-AppType $PackageName)
+    }
+    return $GCIParams
 }
 
 function Get-LatestVersionFromPackages {
+    [CmdLetBinding()]
     Param($PackageName)
     [array]$VerList = [Version]'0.0.0.0'
-    Get-ChildItem -Path $Settings.PackageDest `
-        -Filter (New-PackageDirFilter $PackageName) |
+    $GCIParams = New-PackageDirAndFilter $PackageName
+    Get-ChildItem @GCIParams |
     ForEach-Object {
         $VerString = $_.Name.Split('_')[2]
         If ($VerString -match '\.') {
@@ -276,7 +304,7 @@ function Get-LatestVersionFromURL {
 function Start-VMSequencer {
     [CmdLetBinding()]
     Param([Parameter(ValueFromPipeline=$True)]$PackageName)
-
+    If (!$PackageName) {return}
     Write-Verbose "Running startvm sequencer for $PackageName"
     $Working = Split-Path -Path $PSScriptRoot -Parent
     & (Join-Path -Path $Working -ChildPath PackageOrchestrator.ps1) -Build -PackageName $PackageName
