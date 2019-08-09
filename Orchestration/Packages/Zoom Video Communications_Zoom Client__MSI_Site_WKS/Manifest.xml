@@ -1,0 +1,36 @@
+<Application Name="Zoom Client"
+    Version="$LatestVersion"
+    Vendor="Zoom Video Communications"
+    License="Site"
+    Target="WKS"
+    >
+    <Downloads>
+        <Download Name="Installer" URL="https://zoom.us/download/client/latest/ZoomInstallerFull.msi"
+            VersionFunction="Get-ZoomClientLatestVersion"
+        />
+    </Downloads>
+	<Type Name="EXE">
+		<File>Installer</File>
+		<Args>/VERYSILENT /MERGETASKS=!runcode</Args> <!-- Options: arguments for the exe to install -->
+        <UnFile>C:\Program Files\Git\unins000.exe</UnFile>
+        <UnArgs>/VERYSILENT /LOG=C:\Windows\AppLog\GitWinUninstall.log /NORESTARTM</UnArgs>
+        <ConfigManager>
+            <AddDetectionClause>
+                <DetectionClause Type="KeyValue">
+                    <KeyValue Hive="LocalMachine" 
+                        KeyName="Software\GitForWindows"
+                        ValueName="CurrentVersion"
+                    />
+                    <Properties PropertyType="Version"
+                        ExpectedValue="$LatestVersion"
+                        ExpressionOperator="GreaterEquals"
+                    />
+                </DetectionClause>
+            </AddDetectionClause>
+            <RebootBehavior>BasedOnExitCode</RebootBehavior>
+            <LogonRequirementType>WhetherOrNotUserLoggedOn</LogonRequirementType> 
+            <InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
+            <!-- <WhatIf>True</WhatIf> -->
+        </ConfigManager>
+	</Type>
+</Application>

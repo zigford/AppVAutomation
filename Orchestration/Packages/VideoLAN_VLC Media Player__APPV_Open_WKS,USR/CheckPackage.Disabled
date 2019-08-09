@@ -38,4 +38,4 @@ del "C:\Users\Public\Desktop\VLC media player.lnk"
 $PackageProperties | Select-NewerPackageVersion | New-SequencerScript |
 Start-VMSequencer
 
-Remove-Module InstallFunctions
+Remove-Module InstallFunctions -Verbose:$False

@@ -212,6 +212,23 @@ Remove-Item -Recurse -Force "$SourcePath"
     return $PackageName
 }
 
+function New-AppPackageBundle {
+    <#
+    .DESCRIPTION
+        Downloads the required source, Produces a .apppackage manifest
+        file that can be consumed by the SCCM ImportConvert System
+    .SYNOPSIS
+        Basicly, spit out everything needed to make and deploy a package
+    .PARAMETER Properties
+        A hashtable of things this function needs to know about how to
+        make the package
+    #>
+    [CmdLetBinding()]
+    Param([Parameter(ValueFromPipeline=$True)]$Properties)
+
+
+}
+
 function Select-NewerPackageVersion {
     [CmdLetBinding()]
     Param (
@@ -252,6 +269,7 @@ function Get-AppTarget {
     Param($FullName)
     return $FullName.Split('_')[5]
 }
+
 function Get-DestDir {
     return (Import-Settings).PackageDest
 }
