@@ -5,7 +5,8 @@
     Target="WKS"
     >
     <Downloads>
-        <Download Name="Installer" URL="https://zoom.us/download/client/latest/ZoomInstallerFull.msi"
+        <Download Name="Installer"
+            URL="https://zoom.us/download/client/latest/ZoomInstallerFull.msi"
             VersionFunction="Get-ZoomClientLatestVersion"
         />
     </Downloads>

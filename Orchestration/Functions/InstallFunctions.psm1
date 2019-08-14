@@ -101,7 +101,18 @@ function New-AppPackageBundle {
     [CmdLetBinding()]
     Param([Parameter(ValueFromPipeline=$True)]$Properties)
 
+    If ($Properties -eq $Null) {return}
+    $PackageName = New-PackageName -Properties $Properties
+    $PackageSource = $Properties.Settings.PackageSource
+    $PackageQueue = $Properties.Settings.PackageQueue
+    $SourcePath = New-Item -ItemType Director -Path $PackageQueue `
+        -Name $PackageName -Force
 
+    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
+        -Link $Properties.URL
+    $AppPackageXMLPath = Join-Path -Path $SoucePath -ChildPath `
+        "$(Get-AppName $Properties).apppackage"
+    $Properties.XML.Save($AppPackageXMLPath)
 }
 
 #endregion
@@ -239,7 +250,8 @@ function Select-NewerPackageVersion {
         [Parameter(ValueFromPipeline=$True)]$Options
     )
 
-    $URLVer = Get-LatestVersionFromURL $Options.URL
+    $URLVer = If ($Options.Version) {$Options.Version} else {
+        Get-LatestVersionFromURL $Options.URL}
     $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
 
     If ( $URLVer -gt $LocalVer) {
