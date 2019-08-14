@@ -8,7 +8,105 @@ Each supported package needs 2 functions
 
 #>
 
-#region Common
+#region Package Makers
+
+function New-SequencerScript {
+    Param(
+            [Parameter(ValueFromPipeline)]$Properties
+         )
+    If ($Properties -eq $Null) {return}
+    $Properties['Version'] = Get-LatestVersionFromURL -URL $Properties.URL
+    $PackageName = New-PackageName -Properties $Properties
+    $PackageSource = $Properties.Settings.PackageSource
+    $PackageQueue = $Properties.Settings.PackageQueue
+    $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
+    New-Item -ItemType Directory $SourcePath -Force
+
+    If ($Properties.FixList) {
+        # Deposit the special module along with package source
+        Copy-Item "..\..\Functions\USC-APPV.psm1" $SourcePath
+        $Properties.FixList | ForEach-Object {
+            $_ | Out-File -Append (Join-Path -Path $SourcePath `
+                -ChildPath "FixList.txt")
+        }
+    }
+    If ($Properties.PreReq) {
+        New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
+            -Value $Properties.PreReq -Force
+    }
+
+    If ($Properties.URLFunction) {
+        $Link = Invoke-Expression $Properties.URLFunction
+    } else {
+        ## ToDo Implement Generic URL Downloader
+    }
+    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
+        -Link $Link
+    $InstallScript = "cd `"%~dp0`"`n"
+    $InstallScript += $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
+    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
+        -Value $InstallScript -Force
+
+@"
+
+Set-Location "`$HOME\Desktop"
+New-Item -ItemType Directory -Name Source
+Copy-Item -Path "$SourcePath" -Recurse Source
+Set-Location Source
+`$NewPackageName = "$PackageName"
+If (Test-Path -Path `$NewPackageName) {
+    Set-Location `$NewPackageName
+}
+If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
+`$SequencerOptions = @{
+    Installer = '.\Install.bat'
+    OutputPath = "`$env:USERPROFILE\Desktop"
+    FullLoad = [switch]`$True
+    Name = `$NewPackageName
+}
+`$AppVTemplate = Get-ChildItem -Filter *.appvt
+If ( `$AppVTemplate ) {
+    `$SequencerOptions['TemplateFilePath'] = `$(`$AppVTemplate.FullName)
+}
+
+New-AppvSequencerPackage @SequencerOptions
+If (Get-ChildItem -Path "$($SequencerOptions.OutputPath)" *.appv) {
+    If (Test-Path "FixList.txt") {
+        Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
+        Get-Content "FixList.txt" | ForEach-Object {
+            Start-AppVFix -Path `$PackagePath -Fix `$_
+        }
+    }
+    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse "$PackageSource"
+}
+Remove-Item `$MyInvocation.MyCommand.Source
+Remove-Item -Recurse -Force "$SourcePath"
+"@ | Out-File (Join-Path -Path $PackageQueue `
+    -ChildPath "$($PackageName).ps1")
+
+    return $PackageName
+}
+
+function New-AppPackageBundle {
+    <#
+    .DESCRIPTION
+        Downloads the required source, Produces a .apppackage manifest
+        file that can be consumed by the SCCM ImportConvert System
+    .SYNOPSIS
+        Basicly, spit out everything needed to make and deploy a package
+    .PARAMETER Properties
+        A hashtable of things this function needs to know about how to
+        make the package
+    #>
+    [CmdLetBinding()]
+    Param([Parameter(ValueFromPipeline=$True)]$Properties)
+
+
+}
+
+#endregion
+
+#region Helpers
 
 <#
     Functions commonly used to implement a package checker
@@ -133,100 +231,6 @@ function New-PackageName {
             (Get-AppLicense $PackageName),
             (Get-AppTarget $PackageName)
     )
-}
-
-function New-SequencerScript {
-    Param(
-            [Parameter(ValueFromPipeline)]$Properties
-         )
-    If ($Properties -eq $Null) {return}
-    $Properties['Version'] = Get-LatestVersionFromURL -URL $Properties.URL
-    $PackageName = New-PackageName -Properties $Properties
-    $PackageSource = $Properties.Settings.PackageSource
-    $PackageQueue = $Properties.Settings.PackageQueue
-    $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
-    New-Item -ItemType Directory $SourcePath -Force
-
-    If ($Properties.FixList) {
-        # Deposit the special module along with package source
-        Copy-Item "..\..\Functions\USC-APPV.psm1" $SourcePath
-        $Properties.FixList | ForEach-Object {
-            $_ | Out-File -Append (Join-Path -Path $SourcePath `
-                -ChildPath "FixList.txt")
-        }
-    }
-    If ($Properties.PreReq) {
-        New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
-            -Value $Properties.PreReq -Force
-    }
-
-    If ($Properties.URLFunction) {
-        $Link = Invoke-Expression $Properties.URLFunction
-    } else {
-        ## ToDo Implement Generic URL Downloader
-    }
-    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
-        -Link $Link
-    $InstallScript = "cd `"%~dp0`"`n"
-    $InstallScript += $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
-    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
-        -Value $InstallScript -Force
-
-@"
-
-Set-Location "`$HOME\Desktop"
-New-Item -ItemType Directory -Name Source
-Copy-Item -Path "$SourcePath" -Recurse Source
-Set-Location Source
-`$NewPackageName = "$PackageName"
-If (Test-Path -Path `$NewPackageName) {
-    Set-Location `$NewPackageName
-}
-If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
-`$SequencerOptions = @{
-    Installer = '.\Install.bat'
-    OutputPath = "`$env:USERPROFILE\Desktop"
-    FullLoad = [switch]`$True
-    Name = `$NewPackageName
-}
-`$AppVTemplate = Get-ChildItem -Filter *.appvt
-If ( `$AppVTemplate ) {
-    `$SequencerOptions['TemplateFilePath'] = `$(`$AppVTemplate.FullName)
-}
-
-New-AppvSequencerPackage @SequencerOptions
-If (Get-ChildItem -Path "$($SequencerOptions.OutputPath)" *.appv) {
-    If (Test-Path "FixList.txt") {
-        Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
-        Get-Content "FixList.txt" | ForEach-Object {
-            Start-AppVFix -Path `$PackagePath -Fix `$_
-        }
-    }
-    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse "$PackageSource"
-}
-Remove-Item `$MyInvocation.MyCommand.Source
-Remove-Item -Recurse -Force "$SourcePath"
-"@ | Out-File (Join-Path -Path $PackageQueue `
-    -ChildPath "$($PackageName).ps1")
-
-    return $PackageName
-}
-
-function New-AppPackageBundle {
-    <#
-    .DESCRIPTION
-        Downloads the required source, Produces a .apppackage manifest
-        file that can be consumed by the SCCM ImportConvert System
-    .SYNOPSIS
-        Basicly, spit out everything needed to make and deploy a package
-    .PARAMETER Properties
-        A hashtable of things this function needs to know about how to
-        make the package
-    #>
-    [CmdLetBinding()]
-    Param([Parameter(ValueFromPipeline=$True)]$Properties)
-
-
 }
 
 function Select-NewerPackageVersion {
