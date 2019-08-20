@@ -6,32 +6,20 @@
     >
     <Downloads>
         <Download Name="Installer"
-            URL="https://zoom.us/download/client/latest/ZoomInstallerFull.msi"
+            URL="https://zoom.us/client/latest/ZoomInstallerFull.msi"
             VersionFunction="Get-ZoomClientLatestVersion"
+            CustomUserAgent="Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6"
         />
     </Downloads>
-	<Type Name="EXE">
+	<Type Name="MSI">
 		<File>Installer</File>
-		<Args>/VERYSILENT /MERGETASKS=!runcode</Args> <!-- Options: arguments for the exe to install -->
-        <UnFile>C:\Program Files\Git\unins000.exe</UnFile>
-        <UnArgs>/VERYSILENT /LOG=C:\Windows\AppLog\GitWinUninstall.log /NORESTARTM</UnArgs>
-        <ConfigManager>
-            <AddDetectionClause>
-                <DetectionClause Type="KeyValue">
-                    <KeyValue Hive="LocalMachine" 
-                        KeyName="Software\GitForWindows"
-                        ValueName="CurrentVersion"
-                    />
-                    <Properties PropertyType="Version"
-                        ExpectedValue="$LatestVersion"
-                        ExpressionOperator="GreaterEquals"
-                    />
-                </DetectionClause>
-            </AddDetectionClause>
-            <RebootBehavior>BasedOnExitCode</RebootBehavior>
-            <LogonRequirementType>WhetherOrNotUserLoggedOn</LogonRequirementType> 
-            <InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-            <!-- <WhatIf>True</WhatIf> -->
-        </ConfigManager>
+        <TRANSFORMS></TRANSFORMS>
+        <RebootSuppression>None</RebootSuppression> <!-- Set to FORCE, otherwise all values suppress -->
+        <Context>System</Context> <!-- System or any other value for not system -->
+        <Logfile>Enabled</Logfile> <!-- Enabled or any other value for not enabled -->
+        <Interface>Silent</Interface> <!-- Silent qn or Basic qb -->
+        <RequiresUserInteraction>False</RequiresUserInteraction> <!-- boolean -->
+        <RequiresLogon>False</RequiresLogon> <!-- boolean -->
+        <ProductCode></ProductCode>
 	</Type>
 </Application>

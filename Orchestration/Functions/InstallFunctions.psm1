@@ -15,24 +15,26 @@ function New-SequencerScript {
             [Parameter(ValueFromPipeline)]$Properties
          )
     If ($Properties -eq $Null) {return}
-    $Properties['Version'] = Get-LatestVersionFromURL -URL $Properties.URL
+    $AppXML = $Properties.XML.Application
+    $Properties['Version'] = Get-VersionFromManifest @Properties
     $PackageName = New-PackageName -Properties $Properties
     $PackageSource = $Properties.Settings.PackageSource
     $PackageQueue = $Properties.Settings.PackageQueue
     $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
     New-Item -ItemType Directory $SourcePath -Force
 
-    If ($Properties.FixList) {
+    If ($AppXML.Type.FixLists) {
         # Deposit the special module along with package source
-        Copy-Item "..\..\Functions\USC-APPV.psm1" $SourcePath
-        $Properties.FixList | ForEach-Object {
+        Copy-Item (Join-Path -Path $PSScriptRoot -ChildPath 'USC-APPV.psm1') `
+            $SourcePath
+        $AppXML.Type.FixLists.Fix | ForEach-Object {
             $_ | Out-File -Append (Join-Path -Path $SourcePath `
                 -ChildPath "FixList.txt")
         }
     }
-    If ($Properties.PreReq) {
+    If ($AppXML.Type.PreReqs) {
         New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
-            -Value $Properties.PreReq -Force
+            -Value $AppXML.Type.PreReqs.PreReq -Force
     }
 
     If ($Properties.URLFunction) {
@@ -41,9 +43,9 @@ function New-SequencerScript {
         ## ToDo Implement Generic URL Downloader
     }
     $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
-        -Link $Link
+        @Properties
     $InstallScript = "cd `"%~dp0`"`n"
-    $InstallScript += $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
+    $InstallScript += $AppXML.Type.InstallScript.Replace('DLFILE',$InstallFile.Name)
     New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
         -Value $InstallScript -Force
 
@@ -70,7 +72,7 @@ If ( `$AppVTemplate ) {
 }
 
 New-AppvSequencerPackage @SequencerOptions
-If (Get-ChildItem -Path "$($SequencerOptions.OutputPath)" *.appv) {
+If (Get-ChildItem -Path "`$(`$SequencerOptions.OutputPath)" *.appv) {
     If (Test-Path "FixList.txt") {
         Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
         Get-Content "FixList.txt" | ForEach-Object {
@@ -101,17 +103,19 @@ function New-AppPackageBundle {
     [CmdLetBinding()]
     Param([Parameter(ValueFromPipeline=$True)]$Properties)
 
-    If ($Properties -eq $Null) {return}
+    If ($Null -eq $Properties) {return}
+    $Properties['Version'] = Get-VersionFromManifest @Properties
     $PackageName = New-PackageName -Properties $Properties
     $PackageSource = $Properties.Settings.PackageSource
-    $PackageQueue = $Properties.Settings.PackageQueue
-    $SourcePath = New-Item -ItemType Director -Path $PackageQueue `
+    $SourcePath = New-Item -ItemType Directory -Path $PackageSource `
         -Name $PackageName -Force
 
     $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
-        -Link $Properties.URL
-    $AppPackageXMLPath = Join-Path -Path $SoucePath -ChildPath `
-        "$(Get-AppName $Properties).apppackage"
+        @Properties
+    $AppPackageXMLPath = Join-Path -Path $SourcePath -ChildPath `
+        "$PackageName.apppackage"
+    # Update XML with file name of downloaded file
+    $Properties.XML.Application.Type.File = $InstallFile.Name
     $Properties.XML.Save($AppPackageXMLPath)
 }
 
@@ -123,14 +127,32 @@ function New-AppPackageBundle {
     Functions commonly used to implement a package checker
 #>
 
+function ConvertFrom-DownloadXML {
+    <#
+        Convert the Downloads XML found in an apps manifest
+        to a hashtable which can be passed to various
+        functions as PS Splatting
+    #>
+    [CmdLetBinding()]
+    Param([Parameter(Mandatory=$True)]$DownloadXML)
+    $Result = @{}
+    $DownloadXML.PSObject.Properties | Where-Object {
+        $_.TypeNameOfValue -eq 'System.Xml.XmlAttributeCollection'
+    } | ForEach-Object { $_.Value } | ForEach-Object {
+        $Result[$_.Name] = $_.Value
+    }
+    return $Result
+}
+
 function Import-Settings {
+    Param($ProcessingPath)
     $SettingsPath = "$(Split-Path -Path $PSScriptRoot -Parent)\settings.json"
     If (-Not (Test-Path -Path $SettingsPath)) {
         Write-Error "Unable to find $SettingsPath"
     }
     $Settings = Get-Content $SettingsPath -Raw | ConvertFrom-JSon
     $Settings | Add-Member -MemberType NoteProperty -Name PackageName `
-        -Value (Get-PackageName $MyInvocation.ScriptName)
+        -Value (Get-PackageName $ProcessingPath)
     $Settings
 }
 
@@ -138,12 +160,13 @@ function Get-PackageName {
     Param($ScriptName)
     #$PSScriptRoot
     #Get-Variable
-    $ScriptFile = $ScriptName.Split('\')[-1]
-    $ScriptDir = $ScriptName.Split('\')[-2]
-    If ($ScriptFile -eq 'CheckPackage.ps1') {
+    $ScriptFile = ($ScriptName -Split "\\|/")[-1]
+    $ScriptDir = ($ScriptName -Split "\\|/")[-2]
+    If ($ScriptFile -eq 'CheckPackage.ps1' -or
+        $ScriptFile -eq 'Manifest.xml') {
         return $ScriptDir
     } else {
-        return $ScriptFile.TrimEnd('\.ps1')
+        return ($ScriptFile -replace "\.ps1$","")
     }
 }
 
@@ -198,6 +221,36 @@ function Get-RedirectedUrl {
     }
 }
 
+function Get-VersionFromManifest {
+    [CmdLetBinding()]
+    Param(
+            $VersionURL,
+            $Version,
+            $VersionFunction,
+            [Parameter(ValueFromRemainingArguments)]$Ignore
+        )
+        # Validation
+        If (
+                (
+                    -Not $VersionURL -and
+                    -Not $Version -and
+                    -Not $VersionFunction
+                ) -or 
+                (
+                    ($VersionURL -and $Version) -or
+                    ($Version -and $VersionFunction) -or
+                    ($VersionFunction -and $VersionURL)
+                )
+
+           ) { throw "Must specify one VersionURL, Version or VersionFunction "}
+        If ($Version) {
+             return $Version }
+        If ($VersionFunction) {
+             return (Invoke-Expression $VersionFunction) }
+        If ($VersionURL) {
+             return (Get-LatestVersionFromURL -URL $VersionURL) }
+}
+
 function Get-VersionFromString {
     Param($String)
     If ($String -match '(?<version>\d+\.\d+(\d+|\.)+)') {
@@ -209,14 +262,44 @@ function Get-VersionFromString {
 
 function Get-DownloadFromLink {
     [CmdLetBinding(SupportsShouldProcess)]
-    Param($Link,$OutPath,$Outfile)
+    Param(
+            $URL,
+            $Link,
+            $OutPath,
+            $Outfile,
+            $CustomUserAgent,
+            $URLFunction,
+            [Parameter(ValueFromRemainingArguments)]$Ignore
+    )
+    # Validation
+    If (
+        -Not $URL -and
+        -Not $Link -and
+        -Not $URLFunction
+        ) { throw "URL, Link or URLFunction must be specified" }
+    If (
+        ($URL -and $Link) -or
+        ($Link -and $URLFunction) -or
+        ($URL -and $URLFunction)
+        ) { throw "Only one URL, Link or URLFunction must be specified " }
+
+    If ($URL) { $Link = $URL }
+    If ($URLFunction) { $Link = Invoke-Expression $URLFunction }
     If (!$Outfile) {
         $Outfile = ($Link.Split("/") | Select -Last 1).Replace('%20',' ')
     }
     $Output = Join-Path -Path $OutPath -ChildPath $Outfile
     If (Test-Path $Output) { return (Get-Item $Output) }
     If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
-        Invoke-WebRequest -Uri $Link -OutFile $Output -UseBasicParsing
+        $IWRArgs = @{
+            Uri = $Link
+            OutFile = $Output
+            UseBasicParsing = [Switch]$True
+        }
+        If ($CustomUserAgent) {
+            $IWRArgs.UserAgent = $CustomUserAgent
+        }
+        Invoke-WebRequest @IWRArgs
         $OutFile = Get-Item -Path $Output
         If ($OutFile) {
             Write-Information "Download Success"
@@ -238,7 +321,7 @@ function New-PackageName {
             (Get-AppVendor $PackageName),
             (Get-AppName $PackageName),
             $Properties.Version,
-            "APPV",
+            (Get-AppType $PackageName),
             (Get-AppLicense $PackageName),
             (Get-AppTarget $PackageName)
     )
@@ -250,10 +333,9 @@ function Select-NewerPackageVersion {
         [Parameter(ValueFromPipeline=$True)]$Options
     )
 
-    $URLVer = If ($Options.Version) {$Options.Version} else {
-        Get-LatestVersionFromURL $Options.URL}
-    $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
+    $URLVer = Get-VersionFromManifest @Options
 
+    $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
     If ( $URLVer -gt $LocalVer) {
         Write-Verbose ("$URLVer newer than $LocalVer of {0}" -f `
             $Options.Settings.PackageName)
@@ -322,6 +404,9 @@ function Get-LatestVersionFromPackages {
     Param($PackageName)
     [array]$VerList = [Version]'0.0.0.0'
     $GCIParams = New-PackageDirAndFilter $PackageName
+    If (-Not (Test-Path -Path $GCIParams.Path)) {
+        New-Item -ItemType Directory -Path $GCIParams.Path -Force
+    }
     Get-ChildItem @GCIParams |
     ForEach-Object {
         $VerString = $_.Name.Split('_')[2]

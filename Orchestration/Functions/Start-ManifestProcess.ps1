@@ -3,7 +3,7 @@ Param($Manifest)
 
 Get-Module InstallFunctions | Remove-Module
 Import-Module (Join-Path $PSScriptRoot "InstallFunctions.psm1")
-$Settings = Import-Settings
+$Settings = Import-Settings $Manifest
 
 $XML = [xml](Get-Content $Manifest)
 
@@ -12,7 +12,11 @@ $Installer = $Downloads | Where-Object {$_.Name -eq 'Installer'}
 
 # Validate XML
 # Must have either Version or VersionFunction
-If (-Not ($Installer.Version) -and -Not ($Installer.VersionFunction)) {
+If (
+    -Not ($Installer.Version) -and
+    -Not ($Installer.VersionFunction) -and
+    -Not ($Installer.VersionURL)
+    ) {
     throw "Invalid xml, missing version stuff"
 }
 # Must have either URL or URLFunction
@@ -20,23 +24,13 @@ If (-Not ($Installer.URL) -and -Not ($Installer.URLFunction)) {
     throw "Invalid xml, missing url stuff"
 }
 
-$AppVersion = If ($Installer.Version) { $Installer.Version } else {
-    Invoke-Expression $Installer.VersionFunction}
-$URL = If ($Installer.URL) { $Installer.URL } else {
-    Invoke-Expression $Installer.URLFunction}
+$PackageProperties = ConvertFrom-DownloadXML $Installer
 
-$AppVendor = $XML.Application.Vendor
-$AppName = $XML.Application.Name
-$AppLicense = $XML.Application.License
-$AppTarget = $XML.Application.Target
+$PackageProperties.Settings = $Settings
+$PackageProperties.XML = $XML
 
-$Settings.PackageName = "${AppVendor}_${AppName}_${AppVersion}_${AppLicense}_${AppTarget}"
-
-$PackageProperties = @{
-    Settings = $Settings
-    URL = $URL
-    Version = $AppVersion
-    $XML = $XML
+If ($PackageProperties.XML.Application.Type.Name -eq 'APPV') {
+    $PackageProperties | Select-NewerPackageVersion | New-SequencerScript
+} else {
+    $PackageProperties | Select-NewerPackageVersion | New-AppPackageBundle
 }
-
-$PackageProperties | Select-NewerPackageVersion | New-AppPackageBundle
