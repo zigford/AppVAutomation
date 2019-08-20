@@ -12,10 +12,15 @@ Param($VMHost = 'appdev5',
   [ValidateSet("Windows10","Windows7")]$BaseOS = 'Windows10'
 )
 
+# Initialize variables and paths
+$Working = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
+$FunctionsPath = (Join-Path -Path $PSScriptRoot -ChildPath Functions)
+Import-Module (Join-Path -Path $FunctionsPath -ChildPath "InstallFunctions.psm1")
+Import-Settings | Set-Variable Settings
+$PackageScript = Join-Path -Path $Settings.PackageQueue -ChildPath "${PackageName}.ps1"
+
 # Validation Code
 # Test the ScriptHost. If the Script host is not a VM, only Gen2 VM will be available. If Windows7 is Selected. This will result in an error.
-
-$Working = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 
 Write-Verbose "Running Building Packager Machine script"
 $SystemModel = Get-WmiObject -Class Win32_ComputerSystem
@@ -195,7 +200,7 @@ If ($AutoSequencer) {
 Do {
     Write-Verbose "Waiting for $PackageName to be built..."
     Start-Sleep -Seconds 20
-} While (Test-Path -Path \\usc.internal\usc\appdev\General\Packaging\PackageQueue\$PackageName.ps1)
+} While (Test-Path -Path $PackageScript)
 
 Write-Verbose "Package $PackageName complete"
 Send-EmailMessage -Message "$PackageName has been AutoSequenced! Check the logs at General\Logs\PackageOrchestrator.log" -EmailAddress '3b7f44bd.usceduau.onmicrosoft.com@apac.teams.ms' -Subject "$PackageName"

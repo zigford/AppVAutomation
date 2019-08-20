@@ -57,6 +57,7 @@ If ($LatestVersion -gt $NewestPackage.Version) {
                     <KeyValue Hive="LocalMachine" 
                         KeyName="Software\GitForWindows"
                         ValueName="CurrentVersion"
+                        Is64Bit="True"
                     />
                     <Properties PropertyType="Version"
                         ExpectedValue="$LatestVersion"
