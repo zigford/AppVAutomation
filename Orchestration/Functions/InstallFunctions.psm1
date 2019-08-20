@@ -23,25 +23,24 @@ function New-SequencerScript {
     $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
     New-Item -ItemType Directory $SourcePath -Force
 
-    If ($AppXML.Type.FixLists) {
+    $AppXML.Type.FixLists.Fix | ForEach-Object {
         # Deposit the special module along with package source
-        Copy-Item (Join-Path -Path $PSScriptRoot -ChildPath 'USC-APPV.psm1') `
-            $SourcePath
-        $AppXML.Type.FixLists.Fix | ForEach-Object {
-            $_ | Out-File -Append (Join-Path -Path $SourcePath `
-                -ChildPath "FixList.txt")
+        If ($CopiedModule -ne $True) {
+            Copy-Item (Join-Path -Path $PSScriptRoot `
+                    -ChildPath 'USC-APPV.psm1') $SourcePath
+            $CopiedModule = $True
         }
-    }
-    If ($AppXML.Type.PreReqs) {
-        New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
-            -Value $AppXML.Type.PreReqs.PreReq -Force
+        
+        $_ | Out-File -Append (Join-Path -Path $SourcePath `
+                -ChildPath "FixList.txt")
     }
 
-    If ($Properties.URLFunction) {
-        $Link = Invoke-Expression $Properties.URLFunction
-    } else {
-        ## ToDo Implement Generic URL Downloader
+    $i = 1
+    $AppXML.Type.PreReqs.PreReq | ForEach-Object { 
+        New-Item -ItemType File -Path $SourcePath -Name "PreReq-$i.bat" `
+            -Value $_ -Force
     }
+
     $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
         @Properties
     $InstallScript = "cd `"%~dp0`"`n"
@@ -59,7 +58,9 @@ Set-Location Source
 If (Test-Path -Path `$NewPackageName) {
     Set-Location `$NewPackageName
 }
-If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
+Get-ChildItem -File -Filter "PreReq*.bat" | ForEach-Object {
+    Start-Process -Wait -FilePath `$_.Name
+}
 `$SequencerOptions = @{
     Installer = '.\Install.bat'
     OutputPath = "`$env:USERPROFILE\Desktop"
