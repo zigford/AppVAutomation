@@ -91,7 +91,7 @@ function Get-Clause {
 function Get-MSICMD {
 Param($XML)
 
-    $MSIFile = $XML.Application.Type.MSIFile
+    $MSIFile = $XML.Application.Type.MSI
     $TRANSFORMS = $XML.Application.Type.Transforms
     $REBOOT = $XML.Application.Type.RebootSuppression
     If ($REBOOT -eq "Force") {
@@ -434,8 +434,8 @@ function New-MSIPackage {
         Copy-Item -Path $Source.FullName -Destination $PackageDest -Force -Recurse
     }
 
-    $MSIFile = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.MSIFile)"
-    Write-Output $MSIFile
+    $MSI = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.MSI)"
+    Write-Output $MSI
     #$UninstallCMD = $XML.Application.Type.UninstallCMD
 
     Set-Location -Path SC1:\
@@ -454,9 +454,9 @@ function New-MSIPackage {
         # Update with newer add-cmmsideploymenttype cmdlet. May make
         # Set-CMApplicationXML redundant
             Add-CMMsiDeploymentType -ApplicationName $Application.LocalizedDisplayName `
-                -ContentLocation $MSIFile `
+                -ContentLocation $MSI `
                 -AdministratorComment "Imported with APPVPackage XML" `
-                -ForceForUnknownPublisher $True -DeploymentTypeName "$Name MSI"
+                -Force -DeploymentTypeName "$Name MSI"
             Set-CMApplicationXML -ApplicationName $Application.LocalizedDisplayName -XMLUpdate (Get-MSICMD -XML $Descriptor)
     }
 }
