@@ -458,7 +458,8 @@ function New-MSIPackage {
     Param($Source,$Publisher,$Name,$Version,$Description,$PackageDest,$Descriptor)
     If (!(Test-Path -Path "$PackageDest\$($Source.Name)")) {
         Write-Output "Copying source to Package store"
-        Copy-Item -Path $Source.FullName -Destination $PackageDest -Force -Recurse
+        Copy-Item -Path $Source.FullName -Destination $PackageDest -Force `
+            -Recurse
     }
 
     $MSI = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.File)"
