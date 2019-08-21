@@ -109,6 +109,7 @@ function New-AppPackageBundle {
     $Properties['Version'] = Get-VersionFromManifest @Properties
     $PackageName = New-PackageName -Properties $Properties
     $PackageSource = $Properties.Settings.PackageSource
+    $LocalSource = Split-Path $Properties.ManifestPath -Parent
     $SourcePath = New-Item -ItemType Directory -Path $PackageSource `
         -Name $PackageName -Force
 
@@ -116,6 +117,12 @@ function New-AppPackageBundle {
         @Properties
     $AppPackageXMLPath = Join-Path -Path $SourcePath -ChildPath `
         "$PackageName.apppackage"
+
+    $Properties.XML.Application.LocalFiles.LocalFile | ForEach-Object {
+        Copy-Item (Join-Path $LocalSource -ChildPath $_) `
+            $SourcePath
+    }
+    # Check for MST we need to transferr
     # Update XML with file name of downloaded file
     $Properties.XML.Application.Type.File = $InstallFile.Name
     $Properties.XML.Save($AppPackageXMLPath)

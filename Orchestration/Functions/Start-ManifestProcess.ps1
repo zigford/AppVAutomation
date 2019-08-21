@@ -24,10 +24,11 @@ If (-Not ($Installer.URL) -and -Not ($Installer.URLFunction)) {
     throw "Invalid xml, missing url stuff"
 }
 
-$PackageProperties = ConvertFrom-DownloadXML $Installer
-
-$PackageProperties.Settings = $Settings
-$PackageProperties.XML = $XML
+$PackageProperties = @{
+    Settings = $Settings
+    XML = $XML
+    ManifestPath = $Manifest
+}
 
 If ($PackageProperties.XML.Application.Type.Name -eq 'APPV') {
     $PackageProperties | Select-NewerPackageVersion | New-SequencerScript

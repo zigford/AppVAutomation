@@ -11,9 +11,12 @@
             CustomUserAgent="Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6"
         />
     </Downloads>
+    <LocalFiles>
+        <LocalFile>usc.mst</LocalFile>
+    </LocalFiles>
 	<Type Name="MSI">
 		<File>Installer</File>
-        <TRANSFORMS></TRANSFORMS>
+        <TRANSFORMS>USC.mst</TRANSFORMS>
         <RebootSuppression>ReallySuppress</RebootSuppression> <!-- Set to FORCE, or other MSI reboot values -->
         <Context>System</Context> <!-- System or any other value for not system -->
         <Logfile>Enabled</Logfile> <!-- Enabled or any other value for not enabled -->
