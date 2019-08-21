@@ -14,12 +14,12 @@
 	<Type Name="MSI">
 		<File>Installer</File>
         <TRANSFORMS></TRANSFORMS>
-        <RebootSuppression>None</RebootSuppression> <!-- Set to FORCE, otherwise all values suppress -->
+        <RebootSuppression>ReallySuppress</RebootSuppression> <!-- Set to FORCE, or other MSI reboot values -->
         <Context>System</Context> <!-- System or any other value for not system -->
         <Logfile>Enabled</Logfile> <!-- Enabled or any other value for not enabled -->
         <Interface>Silent</Interface> <!-- Silent qn or Basic qb -->
         <RequiresUserInteraction>False</RequiresUserInteraction> <!-- boolean -->
         <RequiresLogon>False</RequiresLogon> <!-- boolean -->
-        <ProductCode></ProductCode>
+        <ProductCode></ProductCode> <!-- If left empty, ImportConvert will detect it -->
 	</Type>
 </Application>
