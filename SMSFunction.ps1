@@ -436,7 +436,7 @@ function New-MSIPackage {
     #$UninstallCMD = $XML.Application.Type.UninstallCMD
 
     Set-Location -Path SC1:\
-    $Application = Get-CMApplication -Name $Name
+    $Application = Get-CMApplication -Name "$Name $Version"
     If (!$Application) {
         Write-Output "Creating application $Name"
         $Application = New-AppFromTemplate -Name $Name -Publisher $Publisher -Version $Version -Description $Description
