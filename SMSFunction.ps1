@@ -119,7 +119,7 @@ function Get-MSIProductCode {
 function Get-MSICMD {
 Param($XML)
 
-    $MSIFile = $XML.Application.Type.MSI
+    $MSIFile = $XML.Application.Type.File
     $TRANSFORMS = $XML.Application.Type.Transforms
     $REBOOT = $XML.Application.Type.RebootSuppression
     If ($REBOOT -eq "Force") {
@@ -178,7 +178,7 @@ Param($XML)
         'RequiresLogon' = $RequiresLogon
         'RequiresReboot' = $RequiresReboot
         'ExecutionContext' = $AppExecutionContext
-        'ProductCode' = $XML.Application.Type.ProductCode
+        'ProductCode' = $ProductCode
         'RequiresUserInteraction' = $RequiresUserInteraction
     }
     return $MSIObject
@@ -459,12 +459,12 @@ function New-MSIPackage {
         Copy-Item -Path $Source.FullName -Destination $PackageDest -Force -Recurse
     }
 
-    $MSI = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.MSI)"
-    Write-Output $MSI
+    $MSI = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.File)"
     If (-Not $Descriptor.Application.Type.ProductCode) {
         $ProductCode = Get-MSIProductCode $MSI
         $Descriptor.Application.Type.ProductCode = $ProductCode
     }
+    Write-Output "$MSI with $ProductCode"
     #$UninstallCMD = $XML.Application.Type.UninstallCMD
 
     Set-Location -Path SC1:\
