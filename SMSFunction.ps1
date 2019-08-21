@@ -87,6 +87,34 @@ function Get-Clause {
 
 }
 
+function Invoke-MSIMethod {
+    Param($ComObject,
+          $Method,
+          $Options=$null,
+          $CustomMethod = "InvokeMethod"
+    )
+    return ($comObject.GetType().InvokeMember(
+            $Method,
+            $CustomMethod,
+            $null,
+            $comObject,
+            $Options
+        )
+    )
+}
+
+function Get-MSIProductCode {
+    [CmdLetBinding()]
+    Param([Parameter(Mandatory=$True)]$Path)
+
+    $comObjWI = New-Object -ComObject WindowsInstaller.Installer
+    $MSIDatabase = Invoke-MSIMethod $comObjWI "OpenDatabase" @($Path,0)
+    $Query = "SELECT Value FROM Property WHERE Property = 'ProductCode'"
+    $View = Invoke-MSIMethod $MSIDatabase "OpenView" $Query
+    Invoke-MSIMethod $View "Execute" | Out-Null
+    $Record = Invoke-MSIMethod $View "Fetch"
+    return (Invoke-MSIMethod $Record "StringData" 1 "GetProperty")
+}
 
 function Get-MSICMD {
 Param($XML)
@@ -433,6 +461,10 @@ function New-MSIPackage {
 
     $MSI = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.MSI)"
     Write-Output $MSI
+    If (-Not $Descriptor.Application.Type.ProductCode) {
+        $ProductCode = Get-MSIProductCode $MSI
+        $Descriptor.Application.Type.ProductCode = $ProductCode
+    }
     #$UninstallCMD = $XML.Application.Type.UninstallCMD
 
     Set-Location -Path SC1:\
