@@ -20,6 +20,6 @@ If ($Build) {
 
 If ($Destroy) {
     If ($PackageVM) {
-        & "$Working\DestoryPackager.ps1" -VM $PackageVM
+        & "$Working\DestroyPackager.ps1" -VM $PackageVM
     }
 }
