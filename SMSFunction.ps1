@@ -156,9 +156,6 @@ Param($XML)
     return $MSIObject
 }
 
-
-
-
 function New-Collection {
 Param(
     $Type,
