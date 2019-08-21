@@ -1,11 +1,13 @@
 Some automation I have written over the past few years.
 2 Seperate tools
 
-AutoSequencer
+AutoPackager
 =============
 
-Script which runs other scripts.
-The _other_ scripts scrape the web and check for newer versions of specific free software. When found, creates another script in a staging area and then boots up a VM which monitors for these scripts. The third written script, uses New-AppvSequencerPackage to sequence the software.
+Script which parses a xml file specification of a package and target.
+Target can be MSI, EXE or APPV.
+APPV Target produces a script which can be executed on a sequencing machine to produce an APPV.
+EXE or MSI produces an apppackage XML which can be consumed by **ImportConver** and brought into Config Manager for deployment.
 
 ImportConvert
 =============
