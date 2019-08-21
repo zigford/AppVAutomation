@@ -1,7 +1,7 @@
 Some automation I have written over the past few years.
 2 Seperate tools
 
-AutoPackages
+AutoPackager
 =============
 
 Script which parses a xml file specification of a package and target.
