@@ -42,7 +42,7 @@ function New-SequencerScript {
             -Value $_ -Force
     }
 
-    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
+    $InstallFile = Get-Downloads -OutPath $SourcePath `
         @Properties
     $InstallScript = "cd `"%~dp0`"`n"
     $InstallScript += $AppXML.Type.InstallScript.Replace('DLFILE',$InstallFile.Name)
@@ -112,7 +112,7 @@ function New-AppPackageBundle {
     $SourcePath = New-Item -ItemType Directory -Path $PackageSource `
         -Name $PackageName -Force
 
-    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
+    $InstallFile = Get-Downloads -OutPath $SourcePath `
         @Properties
     $AppPackageXMLPath = Join-Path -Path $SourcePath -ChildPath `
         "$PackageName.apppackage"
@@ -136,14 +136,16 @@ function ConvertFrom-DownloadXML {
         functions as PS Splatting
     #>
     [CmdLetBinding()]
-    Param([Parameter(Mandatory=$True)]$DownloadXML)
-    $Result = @{}
-    $DownloadXML.PSObject.Properties | Where-Object {
-        $_.TypeNameOfValue -eq 'System.Xml.XmlAttributeCollection'
-    } | ForEach-Object { $_.Value } | ForEach-Object {
-        $Result[$_.Name] = $_.Value
+    Param([Parameter(ValueFromPipeline=$True)]$DownloadXML)
+    Process {
+        $Result = @{}
+        $DownloadXML.PSObject.Properties | Where-Object {
+            $_.TypeNameOfValue -eq 'System.Xml.XmlAttributeCollection'
+        } | ForEach-Object { $_.Value } | ForEach-Object {
+            $Result[$_.Name] = $_.Value
+        }
+        $Result
     }
-    return $Result
 }
 
 function Import-Settings {
@@ -226,31 +228,31 @@ function Get-RedirectedUrl {
 function Get-VersionFromManifest {
     [CmdLetBinding()]
     Param(
-            $VersionURL,
-            $Version,
-            $VersionFunction,
+            [Parameter(Mandatory=$True)]$XML,
             [Parameter(ValueFromRemainingArguments)]$Ignore
         )
+    $DlData = $XML.Application.Downloads.Download |
+    ConvertFrom-DownloadXML | Where-Object {$_.Name -eq 'Installer'}
         # Validation
         If (
                 (
-                    -Not $VersionURL -and
-                    -Not $Version -and
-                    -Not $VersionFunction
+                    -Not $DlData.VersionURL -and
+                    -Not $DlData.Version -and
+                    -Not $DlData.VersionFunction
                 ) -or 
                 (
-                    ($VersionURL -and $Version) -or
-                    ($Version -and $VersionFunction) -or
-                    ($VersionFunction -and $VersionURL)
+                    ($DlData.VersionURL -and $DlData.Version) -or
+                    ($DlData.Version -and $DlData.VersionFunction) -or
+                    ($DlData.VersionFunction -and $DlData.VersionURL)
                 )
 
            ) { throw "Must specify one VersionURL, Version or VersionFunction "}
-        If ($Version) {
-             return $Version }
-        If ($VersionFunction) {
-             return (Invoke-Expression $VersionFunction) }
-        If ($VersionURL) {
-             return (Get-LatestVersionFromURL -URL $VersionURL) }
+        If ($DlData.Version) {
+             return $DlData.Version }
+        If ($DlData.VersionFunction) {
+             return (Invoke-Expression $DlData.VersionFunction) }
+        If ($DlData.VersionURL) {
+             return (Get-LatestVersionFromURL -URL $DlData.VersionURL) }
 }
 
 function Get-VersionFromString {
@@ -262,52 +264,78 @@ function Get-VersionFromString {
     }
 }
 
-function Get-DownloadFromLink {
+function Get-Downloads {
     [CmdLetBinding(SupportsShouldProcess)]
     Param(
-            $URL,
-            $Link,
-            $OutPath,
+            [Parameter(Mandatory=$True)]$XML,
+            [Parameter(Mandatory=$True)]$OutPath,
             $Outfile,
-            $CustomUserAgent,
-            $URLFunction,
             [Parameter(ValueFromRemainingArguments)]$Ignore
     )
-    # Validation
-    If (
-        -Not $URL -and
-        -Not $Link -and
-        -Not $URLFunction
-        ) { throw "URL, Link or URLFunction must be specified" }
-    If (
-        ($URL -and $Link) -or
-        ($Link -and $URLFunction) -or
-        ($URL -and $URLFunction)
-        ) { throw "Only one URL, Link or URLFunction must be specified " }
-
-    If ($URL) { $Link = $URL }
-    If ($URLFunction) { $Link = Invoke-Expression $URLFunction }
-    If (!$Outfile) {
-        $Outfile = ($Link.Split("/") | Select -Last 1).Replace('%20',' ')
+    $DParams = @{
+        OutPath = $OutPath 
     }
-    $Output = Join-Path -Path $OutPath -ChildPath $Outfile
-    If (Test-Path $Output) { return (Get-Item $Output) }
-    If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
-        $IWRArgs = @{
-            Uri = $Link
-            OutFile = $Output
-            UseBasicParsing = [Switch]$True
+    If ($Outfile) {
+        $DParams.Outfile = $Outfile
+    }
+    $XML.Application.Downloads.Download |
+    ConvertFrom-DownloadXML |
+    Get-Download @DParams
+}
+
+function Get-Download {
+    [CmdLetBinding(SupportsShouldProcess)]
+    Param(
+            [Parameter(ValueFromPipeline=$True)]$DownloadData,
+            [Parameter(Mandatory=$True)]$OutPath,
+            $Outfile,
+            [Parameter(ValueFromRemainingArguments)]$Ignore
+    )
+    Process {
+        If (
+            -Not $DownloadData.URL -and
+            -Not $DownloadData.URLFunction
+            ) { throw "URL or URLFunction must be specified" }
+        If ($DownloadData.URL -and $DownloadData.URLFunction) {
+            throw "Only one URL or URLFunction must be specified "
         }
-        If ($CustomUserAgent) {
-            $IWRArgs.UserAgent = $CustomUserAgent
+
+        If ($DownloadData.URLFunction) {
+            $URL = Invoke-Expression $DownloadData.URLFunction
+        } elseif ($DownloadData.URL) {
+            $URL = $DownloadData.URL
         }
-        Invoke-WebRequest @IWRArgs
-        $OutFile = Get-Item -Path $Output
-        If ($OutFile) {
-            Write-Information "Download Success"
-            return $OutFile
-        } Else {
-            Write-Error "Download Failed"
+        If (!$Outfile) {
+            $Outfile = (
+                $URL.Split("/") | Select-Object -Last 1).Replace('%20',' ')
+        }
+        $Output = Join-Path -Path $OutPath -ChildPath $Outfile
+        If (Test-Path $Output) {
+            If ($DownloadData.Name -eq 'Installer') {
+                return (Get-Item $Output)
+            }
+            return
+        }
+        If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
+            $IWRArgs = @{
+                Uri = $URL
+                OutFile = $Output
+                UseBasicParsing = [Switch]$True
+            }
+            If ($DownloadData.CustomUserAgent) {
+                $IWRArgs.UserAgent = $DownloadData.CustomUserAgent
+            }
+            Invoke-WebRequest @IWRArgs
+            $OutFile = Get-Item -Path $Output
+            If ($OutFile) {
+                Write-Information "Download Success"
+                If ($DownloadData.Name -eq 'Installer') {
+                    return $OutFile
+                }
+                return
+            } else {
+                Write-Error "Download failed"
+            }
         }
     }
 }
