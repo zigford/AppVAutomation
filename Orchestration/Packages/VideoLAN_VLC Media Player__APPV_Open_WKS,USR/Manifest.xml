@@ -1,0 +1,24 @@
+﻿<Application Name="VLC Media Player"
+    Version="$LatestVersion"
+    Vendor="VideoLan"
+    License="Open"
+    Target="WKS,USR"
+    >
+    <Downloads>
+        <Download Name="Installer"
+            VersionURL='http://download.videolan.org/pub/videolan/vlc'
+            URLFunction="Get-VLCDownloadLink -Type MSI"
+            />
+    </Downloads>
+    <Type Name="APPV">
+        <InstallScript>start /wait msiexec.exe /I "DLFILE" /qb REBOOT=REALLYSUPPRESS'
+    del "C:\Users\Public\Desktop\VLC media player.lnk"
+        </InstallScript>
+        <FixLists>
+            <!-- <Fix>DisableObjects</Fix> Example -->
+        </FixLists>
+        <PreReqs>
+            <!-- <PreReq>notepad.exe</PreReq> Example -->
+        </PreReqs>
+    </Type>
+</Application>

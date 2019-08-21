@@ -1,3 +1,4 @@
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
 <#
 
 Each supported package needs 2 functions
@@ -8,20 +9,161 @@ Each supported package needs 2 functions
 
 #>
 
-#region Common
+#region Package Makers
+
+function New-SequencerScript {
+    Param(
+            [Parameter(ValueFromPipeline)]$Properties
+         )
+    If ($Properties -eq $Null) {return}
+    $AppXML = $Properties.XML.Application
+    $Properties['Version'] = Get-VersionFromManifest @Properties
+    $PackageName = New-PackageName -Properties $Properties
+    $PackageSource = $Properties.Settings.PackageSource
+    $PackageQueue = $Properties.Settings.PackageQueue
+    $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
+    New-Item -ItemType Directory $SourcePath -Force
+
+    $AppXML.Type.FixLists.Fix | ForEach-Object {
+        # Deposit the special module along with package source
+        If ($CopiedModule -ne $True) {
+            Copy-Item (Join-Path -Path $PSScriptRoot `
+                    -ChildPath 'USC-APPV.psm1') $SourcePath
+            $CopiedModule = $True
+        }
+        
+        $_ | Out-File -Append (Join-Path -Path $SourcePath `
+                -ChildPath "FixList.txt")
+    }
+
+    $i = 1
+    $AppXML.Type.PreReqs.PreReq | ForEach-Object { 
+        New-Item -ItemType File -Path $SourcePath -Name "PreReq-$i.bat" `
+            -Value $_ -Force
+    }
+
+    $InstallFile = Get-Downloads -OutPath $SourcePath `
+        @Properties
+    $InstallScript = "cd `"%~dp0`"`n"
+    $InstallScript += $AppXML.Type.InstallScript.Replace('DLFILE',$InstallFile.Name)
+    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
+        -Value $InstallScript -Force
+
+@"
+
+Set-Location "`$HOME\Desktop"
+New-Item -ItemType Directory -Name Source
+Copy-Item -Path "$SourcePath" -Recurse Source
+Set-Location Source
+`$NewPackageName = "$PackageName"
+If (Test-Path -Path `$NewPackageName) {
+    Set-Location `$NewPackageName
+}
+Get-ChildItem -File -Filter "PreReq*.bat" | ForEach-Object {
+    Start-Process -Wait -FilePath `$_.Name
+}
+`$SequencerOptions = @{
+    Installer = '.\Install.bat'
+    OutputPath = "`$env:USERPROFILE\Desktop"
+    FullLoad = [switch]`$True
+    Name = `$NewPackageName
+}
+`$AppVTemplate = Get-ChildItem -Filter *.appvt
+If ( `$AppVTemplate ) {
+    `$SequencerOptions['TemplateFilePath'] = `$(`$AppVTemplate.FullName)
+}
+
+New-AppvSequencerPackage @SequencerOptions
+If (Get-ChildItem -Path "`$(`$SequencerOptions.OutputPath)" *.appv) {
+    If (Test-Path "FixList.txt") {
+        Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
+        Get-Content "FixList.txt" | ForEach-Object {
+            Start-AppVFix -Path `$PackagePath -Fix `$_
+        }
+    }
+    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse "$PackageSource"
+}
+Remove-Item `$MyInvocation.MyCommand.Source
+Remove-Item -Recurse -Force "$SourcePath"
+"@ | Out-File (Join-Path -Path $PackageQueue `
+    -ChildPath "$($PackageName).ps1")
+
+    return $PackageName
+}
+
+function New-AppPackageBundle {
+    <#
+    .DESCRIPTION
+        Downloads the required source, Produces a .apppackage manifest
+        file that can be consumed by the SCCM ImportConvert System
+    .SYNOPSIS
+        Basicly, spit out everything needed to make and deploy a package
+    .PARAMETER Properties
+        A hashtable of things this function needs to know about how to
+        make the package
+    #>
+    [CmdLetBinding()]
+    Param([Parameter(ValueFromPipeline=$True)]$Properties)
+
+    If ($Null -eq $Properties) {return}
+    $Properties['Version'] = Get-VersionFromManifest @Properties
+    $PackageName = New-PackageName -Properties $Properties
+    $PackageSource = $Properties.Settings.PackageSource
+    $LocalSource = Split-Path $Properties.ManifestPath -Parent
+    $SourcePath = New-Item -ItemType Directory -Path $PackageSource `
+        -Name $PackageName -Force
+
+    $InstallFile = Get-Downloads -OutPath $SourcePath `
+        @Properties
+    $AppPackageXMLPath = Join-Path -Path $SourcePath -ChildPath `
+        "$PackageName.apppackage"
+
+    $Properties.XML.Application.LocalFiles.LocalFile | ForEach-Object {
+        Copy-Item (Join-Path $LocalSource -ChildPath $_) `
+            $SourcePath
+    }
+    # Check for MST we need to transferr
+    # Update XML with file name of downloaded file
+    $Properties.XML.Application.Type.File = $InstallFile.Name
+    $Properties.XML.Save($AppPackageXMLPath)
+}
+
+#endregion
+
+#region Helpers
 
 <#
     Functions commonly used to implement a package checker
 #>
 
+function ConvertFrom-DownloadXML {
+    <#
+        Convert the Downloads XML found in an apps manifest
+        to a hashtable which can be passed to various
+        functions as PS Splatting
+    #>
+    [CmdLetBinding()]
+    Param([Parameter(ValueFromPipeline=$True)]$DownloadXML)
+    Process {
+        $Result = @{}
+        $DownloadXML.PSObject.Properties | Where-Object {
+            $_.TypeNameOfValue -eq 'System.Xml.XmlAttributeCollection'
+        } | ForEach-Object { $_.Value } | ForEach-Object {
+            $Result[$_.Name] = $_.Value
+        }
+        $Result
+    }
+}
+
 function Import-Settings {
+    Param($ProcessingPath)
     $SettingsPath = "$(Split-Path -Path $PSScriptRoot -Parent)\settings.json"
     If (-Not (Test-Path -Path $SettingsPath)) {
         Write-Error "Unable to find $SettingsPath"
     }
     $Settings = Get-Content $SettingsPath -Raw | ConvertFrom-JSon
     $Settings | Add-Member -MemberType NoteProperty -Name PackageName `
-        -Value (Get-PackageName $MyInvocation.ScriptName)
+        -Value (Get-PackageName $ProcessingPath)
     $Settings
 }
 
@@ -29,12 +171,13 @@ function Get-PackageName {
     Param($ScriptName)
     #$PSScriptRoot
     #Get-Variable
-    $ScriptFile = $ScriptName.Split('\')[-1]
-    $ScriptDir = $ScriptName.Split('\')[-2]
-    If ($ScriptFile -eq 'CheckPackage.ps1') {
+    $ScriptFile = ($ScriptName -Split "\\|/")[-1]
+    $ScriptDir = ($ScriptName -Split "\\|/")[-2]
+    If ($ScriptFile -eq 'CheckPackage.ps1' -or
+        $ScriptFile -eq 'Manifest.xml') {
         return $ScriptDir
     } else {
-        return $ScriptFile.TrimEnd('\.ps1')
+        return ($ScriptFile -replace "\.ps1$","")
     }
 }
 
@@ -89,22 +232,117 @@ function Get-RedirectedUrl {
     }
 }
 
-function Get-DownloadFromLink {
-    [CmdLetBinding(SupportsShouldProcess)]
-    Param($Link,$OutPath,$Outfile)
-    If (!$Outfile) {
-        $Outfile = ($Link.Split("/") | Select -Last 1).Replace('%20',' ')
+function Get-VersionFromManifest {
+    [CmdLetBinding()]
+    Param(
+            [Parameter(Mandatory=$True)]$XML,
+            [Parameter(ValueFromRemainingArguments)]$Ignore
+        )
+    $DlData = $XML.Application.Downloads.Download |
+    ConvertFrom-DownloadXML | Where-Object {$_.Name -eq 'Installer'}
+        # Validation
+        If (
+                (
+                    -Not $DlData.VersionURL -and
+                    -Not $DlData.Version -and
+                    -Not $DlData.VersionFunction
+                ) -or 
+                (
+                    ($DlData.VersionURL -and $DlData.Version) -or
+                    ($DlData.Version -and $DlData.VersionFunction) -or
+                    ($DlData.VersionFunction -and $DlData.VersionURL)
+                )
+
+           ) { throw "Must specify one VersionURL, Version or VersionFunction "}
+        If ($DlData.Version) {
+             return $DlData.Version }
+        If ($DlData.VersionFunction) {
+             return (Invoke-Expression $DlData.VersionFunction) }
+        If ($DlData.VersionURL) {
+             return (Get-LatestVersionFromURL -URL $DlData.VersionURL) }
+}
+
+function Get-VersionFromString {
+    Param($String)
+    If ($String -match '(?<version>\d+\.\d+(\d+|\.)+)') {
+        return [Version]$Matches['version']
+    } else {
+        return [Version]'0.0.0.0'
     }
-    $Output = Join-Path -Path $OutPath -ChildPath $Outfile
-    If (Test-Path $Output) { return (Get-Item $Output) }
-    If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
-        Invoke-WebRequest -Uri $Link -OutFile $Output -UseBasicParsing
-        $OutFile = Get-Item -Path $Output
-        If ($OutFile) {
-            Write-Information "Download Success"
-            return $OutFile
-        } Else {
-            Write-Error "Download Failed"
+}
+
+function Get-Downloads {
+    [CmdLetBinding(SupportsShouldProcess)]
+    Param(
+            [Parameter(Mandatory=$True)]$XML,
+            [Parameter(Mandatory=$True)]$OutPath,
+            $Outfile,
+            [Parameter(ValueFromRemainingArguments)]$Ignore
+    )
+    $DParams = @{
+        OutPath = $OutPath 
+    }
+    If ($Outfile) {
+        $DParams.Outfile = $Outfile
+    }
+    $XML.Application.Downloads.Download |
+    ConvertFrom-DownloadXML |
+    Get-Download @DParams
+}
+
+function Get-Download {
+    [CmdLetBinding(SupportsShouldProcess)]
+    Param(
+            [Parameter(ValueFromPipeline=$True)]$DownloadData,
+            [Parameter(Mandatory=$True)]$OutPath,
+            $Outfile,
+            [Parameter(ValueFromRemainingArguments)]$Ignore
+    )
+    Process {
+        If (
+            -Not $DownloadData.URL -and
+            -Not $DownloadData.URLFunction
+            ) { throw "URL or URLFunction must be specified" }
+        If ($DownloadData.URL -and $DownloadData.URLFunction) {
+            throw "Only one URL or URLFunction must be specified "
+        }
+
+        If ($DownloadData.URLFunction) {
+            $URL = Invoke-Expression $DownloadData.URLFunction
+        } elseif ($DownloadData.URL) {
+            $URL = $DownloadData.URL
+        }
+        If (!$Outfile) {
+            $Outfile = (
+                $URL.Split("/") | Select-Object -Last 1).Replace('%20',' ')
+        }
+        $Output = Join-Path -Path $OutPath -ChildPath $Outfile
+        If (Test-Path $Output) {
+            If ($DownloadData.Name -eq 'Installer') {
+                return (Get-Item $Output)
+            }
+            return
+        }
+        If ($PSCmdlet.ShouldProcess($Output, "Download file to")) {
+            $IWRArgs = @{
+                Uri = $URL
+                OutFile = $Output
+                UseBasicParsing = [Switch]$True
+            }
+            If ($DownloadData.CustomUserAgent) {
+                $IWRArgs.UserAgent = $DownloadData.CustomUserAgent
+            }
+            Invoke-WebRequest @IWRArgs
+            $OutFile = Get-Item -Path $Output
+            If ($OutFile) {
+                Write-Information "Download Success"
+                If ($DownloadData.Name -eq 'Installer') {
+                    return $OutFile
+                }
+                return
+            } else {
+                Write-Error "Download failed"
+            }
         }
     }
 }
@@ -120,87 +358,10 @@ function New-PackageName {
             (Get-AppVendor $PackageName),
             (Get-AppName $PackageName),
             $Properties.Version,
-            "APPV",
+            (Get-AppType $PackageName),
             (Get-AppLicense $PackageName),
             (Get-AppTarget $PackageName)
     )
-}
-
-function New-SequencerScript {
-    Param(
-            [Parameter(ValueFromPipeline)]$Properties
-         )
-    If ($Properties -eq $Null) {return}
-    $Properties['Version'] = Get-LatestVersionFromURL -URL $Properties.URL
-    $PackageName = New-PackageName -Properties $Properties
-    $PackageSource = $Properties.Settings.PackageSource
-    $PackageQueue = $Properties.Settings.PackageQueue
-    $SourcePath = Join-Path -Path $PackageQueue -ChildPath $PackageName
-    New-Item -ItemType Directory $SourcePath -Force
-
-    If ($Properties.FixList) {
-        # Deposit the special module along with package source
-        Copy-Item "..\..\Functions\USC-APPV.psm1" $SourcePath
-        $Properties.FixList | ForEach-Object {
-            $_ | Out-File -Append (Join-Path -Path $SourcePath `
-                -ChildPath "FixList.txt")
-        }
-    }
-    If ($Properties.PreReq) {
-        New-Item -ItemType File -Path $SourcePath -Name "PreReq.bat" `
-            -Value $Properties.PreReq -Force
-    }
-
-    If ($Properties.URLFunction) {
-        $Link = Invoke-Expression $Properties.URLFunction
-    } else {
-        ## ToDo Implement Generic URL Downloader
-    }
-    $InstallFile = Get-DownloadFromLink -OutPath $SourcePath `
-        -Link $Link
-    $InstallScript = "cd `"%~dp0`"`n"
-    $InstallScript += $Properties.InstallScript.Replace('<DLFILE>',$InstallFile.Name)
-    New-Item -ItemType File -Path $SourcePath -Name "Install.bat" `
-        -Value $InstallScript -Force
-
-@"
-
-Set-Location "`$HOME\Desktop"
-New-Item -ItemType Directory -Name Source
-Copy-Item -Path "$SourcePath" -Recurse Source
-Set-Location Source
-`$NewPackageName = "$PackageName"
-If (Test-Path -Path `$NewPackageName) {
-    Set-Location `$NewPackageName
-}
-If (Test-Path "PreReq.bat") { Start-Process -Wait -FilePath "PreReq.bat" }
-`$SequencerOptions = @{
-    Installer = '.\Install.bat'
-    OutputPath = "`$env:USERPROFILE\Desktop"
-    FullLoad = [switch]`$True
-    Name = `$NewPackageName
-}
-`$AppVTemplate = Get-ChildItem -Filter *.appvt
-If ( `$AppVTemplate ) {
-    `$SequencerOptions['TemplateFilePath'] = `$(`$AppVTemplate.FullName)
-}
-
-New-AppvSequencerPackage @SequencerOptions
-If (Get-ChildItem -Path "$($SequencerOptions.OutputPath)" *.appv) {
-    If (Test-Path "FixList.txt") {
-        Import-Module (Join-Path -Path . -ChildPath "USC-APPV.psm1")
-        Get-Content "FixList.txt" | ForEach-Object {
-            Start-AppVFix -Path `$PackagePath -Fix `$_
-        }
-    }
-    Copy-Item `$env:USERPROFILE\Desktop\`$NewPackageName -Recurse "$PackageSource"
-}
-Remove-Item `$MyInvocation.MyCommand.Source
-Remove-Item -Recurse -Force "$SourcePath"
-"@ | Out-File (Join-Path -Path $PackageQueue `
-    -ChildPath "$($PackageName).ps1")
-
-    return $PackageName
 }
 
 function Select-NewerPackageVersion {
@@ -209,9 +370,9 @@ function Select-NewerPackageVersion {
         [Parameter(ValueFromPipeline=$True)]$Options
     )
 
-    $URLVer = Get-LatestVersionFromURL $Options.URL
-    $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
+    $URLVer = Get-VersionFromManifest @Options
 
+    $LocalVer = Get-LatestVersionFromPackages $Options.Settings.PackageName
     If ( $URLVer -gt $LocalVer) {
         Write-Verbose ("$URLVer newer than $LocalVer of {0}" -f `
             $Options.Settings.PackageName)
@@ -243,6 +404,7 @@ function Get-AppTarget {
     Param($FullName)
     return $FullName.Split('_')[5]
 }
+
 function Get-DestDir {
     return (Import-Settings).PackageDest
 }
@@ -279,6 +441,9 @@ function Get-LatestVersionFromPackages {
     Param($PackageName)
     [array]$VerList = [Version]'0.0.0.0'
     $GCIParams = New-PackageDirAndFilter $PackageName
+    If (-Not (Test-Path -Path $GCIParams.Path)) {
+        New-Item -ItemType Directory -Path $GCIParams.Path -Force
+    }
     Get-ChildItem @GCIParams |
     ForEach-Object {
         $VerString = $_.Name.Split('_')[2]
@@ -527,6 +692,43 @@ function Test-NewerVLCVersion {
     )
     (Get-VLCLatestVersion $URL) -gt (Get-VersionStringsFromPackages)
 }
+#endregion
+
+#region Zoom
+
+function Get-ZoomClientDownloadLink {
+    Param([ValidateSet('MSI','EXE')]$Type)
+
+    $userAgent = 'Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6'
+    $url = 'https://zoom.us/download'
+    $WebObject = Invoke-WebRequest -Uri $url -UserAgent $userAgent
+    $relativeLink = $WebObject.Links | Where-Object {
+        $_ -match "ZoomInstallerFull.$Type"
+    } | Select-Object -ExpandProperty href
+    return "${url}${relativeLink}"
+}
+
+function Get-ZoomClientLatestVersion {
+    Param($ClientFilter='Zoom Client for Meetings')
+    $userAgent = 'Mozilla/5.0 (Windows NT; Windows NT 6.1; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6'
+    $url = 'https://zoom.us/download'
+    $WebObject = Invoke-WebRequest -Uri $url -UserAgent $userAgent
+    $Strings = $WebObject -replace "`n","" -split "<.*?>" | Where-Object {
+        $_ -match "^Zoom\s.*(Client|Plugin|Rooms)" -or $_ -match "^Version"
+    }
+    $ClientsAndVersions = $Strings | ForEach-Object {
+        If ($_ -match 'Zoom' -and $Strings[$Index+1] -match 'Version') {
+            [PSCustomObject]@{
+                Client = $_
+                Version = Get-VersionFromString $Strings[$Index+1]
+            }
+        }
+        $Index ++
+    }
+    $ClientsAndVersions | Where-Object {$_.Client -match $ClientFilter} |
+    Select-Object -ExpandProperty Version
+}
+
 #endregion
 
 Export-ModuleMember *

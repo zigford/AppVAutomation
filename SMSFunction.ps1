@@ -87,11 +87,39 @@ function Get-Clause {
 
 }
 
+function Invoke-MSIMethod {
+    Param($ComObject,
+          $Method,
+          $Options=$null,
+          $CustomMethod = "InvokeMethod"
+    )
+    return ($comObject.GetType().InvokeMember(
+            $Method,
+            $CustomMethod,
+            $null,
+            $comObject,
+            $Options
+        )
+    )
+}
+
+function Get-MSIProductCode {
+    [CmdLetBinding()]
+    Param([Parameter(Mandatory=$True)]$Path)
+
+    $comObjWI = New-Object -ComObject WindowsInstaller.Installer
+    $MSIDatabase = Invoke-MSIMethod $comObjWI "OpenDatabase" @($Path,0)
+    $Query = "SELECT Value FROM Property WHERE Property = 'ProductCode'"
+    $View = Invoke-MSIMethod $MSIDatabase "OpenView" $Query
+    Invoke-MSIMethod $View "Execute" | Out-Null
+    $Record = Invoke-MSIMethod $View "Fetch"
+    return (Invoke-MSIMethod $Record "StringData" 1 "GetProperty")
+}
 
 function Get-MSICMD {
 Param($XML)
 
-    $MSIFile = $XML.Application.Type.MSIFile
+    $MSIFile = $XML.Application.Type.File
     $TRANSFORMS = $XML.Application.Type.Transforms
     $REBOOT = $XML.Application.Type.RebootSuppression
     If ($REBOOT -eq "Force") {
@@ -126,9 +154,11 @@ Param($XML)
         False { $RequiresLogon = $False }
         Default { $RequiresLogon = $null }
     }
-    $InstallCommand = 'msiexec /i "{0}" TRANSFORMS="{1}" REBOOT={2} {3}' `
-        -f $MSIFile, $Transforms, $REBOOT, $Switches
-
+    $InstallCommand = 'msiexec /i "{0}" ' -f $MSIFile
+    If ($TRANSFORMS) {
+        $InstallCommand += 'TRANSFORMS="{0}" ' -f $TRANSFORMS
+    }
+    $InstallCommand += 'REBOOT={0} {1}' -f $REBOOT, $Switches
     $LogFilePath = If ($XML.Application.Type.Context -eq "System" ) {
         "C:\Windows\AppLog\$($XML.Application.Name)-Uninstall.log"
     } else {
@@ -150,14 +180,11 @@ Param($XML)
         'RequiresLogon' = $RequiresLogon
         'RequiresReboot' = $RequiresReboot
         'ExecutionContext' = $AppExecutionContext
-        'ProductCode' = $XML.Application.Type.ProductCode
+        'ProductCode' = $ProductCode
         'RequiresUserInteraction' = $RequiresUserInteraction
     }
     return $MSIObject
 }
-
-
-
 
 function New-Collection {
 Param(
@@ -431,33 +458,47 @@ function New-MSIPackage {
     Param($Source,$Publisher,$Name,$Version,$Description,$PackageDest,$Descriptor)
     If (!(Test-Path -Path "$PackageDest\$($Source.Name)")) {
         Write-Output "Copying source to Package store"
-        Copy-Item -Path $Source.FullName -Destination $PackageDest -Force -Recurse
+        Copy-Item -Path $Source.FullName -Destination $PackageDest -Force `
+            -Recurse
     }
 
-    $MSIFile = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.MSIFile)"
-    Write-Output $MSIFile
+    $MSI = "$PackageDest\$($Source.Name)\$($Descriptor.Application.Type.File)"
+    If (-Not $Descriptor.Application.Type.ProductCode) {
+        $ProductCode = Get-MSIProductCode $MSI
+        $Descriptor.Application.Type.ProductCode = $ProductCode
+    }
+    Write-Output "$MSI with $ProductCode"
     #$UninstallCMD = $XML.Application.Type.UninstallCMD
 
     Set-Location -Path SC1:\
-    $Application = Get-CMApplication -Name $Name
+    $Application = Get-CMApplication -Name "$Name $Version"
     If (!$Application) {
         Write-Output "Creating application $Name"
-        $Application = New-AppFromTemplate -Name $Name -Publisher $Publisher -Version $Version -Description $Description
+        $Application = New-AppFromTemplate `
+            -Name $Name `
+            -Publisher $Publisher `
+            -Version $Version `
+            -Description $Description
         Write-Output "Created application $Name"
     }
     Write-Output "Sleeping..."
     Start-Sleep -Seconds 10
-    $Deployment = Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
+    $Deployment =
+        Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
     If (!$Deployment) {
-        Write-Output "Adding deployment type MSI for $($Application.LocalizedDisplayName)"
+        Write-Output $("Adding deployment type MSI for {0}" `
+                -f $Application.LocalizedDisplayName)
         ### TODO ###
         # Update with newer add-cmmsideploymenttype cmdlet. May make
         # Set-CMApplicationXML redundant
-            Add-CMMsiDeploymentType -ApplicationName $Application.LocalizedDisplayName `
-                -ContentLocation $MSIFile `
+            Add-CMMsiDeploymentType `
+                -ApplicationName $Application.LocalizedDisplayName `
+                -ContentLocation $MSI `
                 -AdministratorComment "Imported with APPVPackage XML" `
-                -ForceForUnknownPublisher $True -DeploymentTypeName "$Name MSI"
-            Set-CMApplicationXML -ApplicationName $Application.LocalizedDisplayName -XMLUpdate (Get-MSICMD -XML $Descriptor)
+                -Force -DeploymentTypeName "$Name MSI"
+            Set-CMApplicationXML `
+                -ApplicationName $Application.LocalizedDisplayName `
+                -XMLUpdate (Get-MSICMD -XML $Descriptor)
     }
 }
 
