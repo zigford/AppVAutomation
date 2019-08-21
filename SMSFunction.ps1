@@ -154,9 +154,11 @@ Param($XML)
         False { $RequiresLogon = $False }
         Default { $RequiresLogon = $null }
     }
-    $InstallCommand = 'msiexec /i "{0}" TRANSFORMS="{1}" REBOOT={2} {3}' `
-        -f $MSIFile, $Transforms, $REBOOT, $Switches
-
+    $InstallCommand = 'msiexec /i "{0}" ' -f $MSIFile
+    If ($TRANSFORMS) {
+        $InstallCommand += 'TRANSFORMS="{0}" ' -f $TRANSFORMS
+    }
+    $InstallCommand += 'REBOOT={0} {1}' -f $REBOOT, $Switches
     $LogFilePath = If ($XML.Application.Type.Context -eq "System" ) {
         "C:\Windows\AppLog\$($XML.Application.Name)-Uninstall.log"
     } else {
