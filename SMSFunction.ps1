@@ -439,22 +439,31 @@ function New-MSIPackage {
     $Application = Get-CMApplication -Name "$Name $Version"
     If (!$Application) {
         Write-Output "Creating application $Name"
-        $Application = New-AppFromTemplate -Name $Name -Publisher $Publisher -Version $Version -Description $Description
+        $Application = New-AppFromTemplate `
+            -Name $Name `
+            -Publisher $Publisher `
+            -Version $Version `
+            -Description $Description
         Write-Output "Created application $Name"
     }
     Write-Output "Sleeping..."
     Start-Sleep -Seconds 10
-    $Deployment = Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
+    $Deployment =
+        Get-CMDeploymentType -ApplicationName $Application.LocalizedDisplayName
     If (!$Deployment) {
-        Write-Output "Adding deployment type MSI for $($Application.LocalizedDisplayName)"
+        Write-Output $("Adding deployment type MSI for {0}" `
+                -f $Application.LocalizedDisplayName)
         ### TODO ###
         # Update with newer add-cmmsideploymenttype cmdlet. May make
         # Set-CMApplicationXML redundant
-            Add-CMMsiDeploymentType -ApplicationName $Application.LocalizedDisplayName `
+            Add-CMMsiDeploymentType `
+                -ApplicationName $Application.LocalizedDisplayName `
                 -ContentLocation $MSI `
                 -AdministratorComment "Imported with APPVPackage XML" `
                 -Force -DeploymentTypeName "$Name MSI"
-            Set-CMApplicationXML -ApplicationName $Application.LocalizedDisplayName -XMLUpdate (Get-MSICMD -XML $Descriptor)
+            Set-CMApplicationXML `
+                -ApplicationName $Application.LocalizedDisplayName `
+                -XMLUpdate (Get-MSICMD -XML $Descriptor)
     }
 }
 
