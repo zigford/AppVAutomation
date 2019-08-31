@@ -15,7 +15,7 @@ function New-SequencerScript {
     Param(
             [Parameter(ValueFromPipeline)]$Properties
          )
-    If ($Properties -eq $Null) {return}
+    If ($Null -eq $Properties) {return}
     $AppXML = $Properties.XML.Application
     $Properties['Version'] = Get-VersionFromManifest @Properties
     $PackageName = New-PackageName -Properties $Properties
@@ -156,7 +156,7 @@ function ConvertFrom-DownloadXML {
 }
 
 function Import-Settings {
-    Param($ProcessingPath)
+    Param($ProcessingPath, [String[]]$RequiredSettings)
     $SettingsPath = "$(Split-Path -Path $PSScriptRoot -Parent)\settings.json"
     If (-Not (Test-Path -Path $SettingsPath)) {
         Write-Error "Unable to find $SettingsPath"
@@ -164,6 +164,11 @@ function Import-Settings {
     $Settings = Get-Content $SettingsPath -Raw | ConvertFrom-JSon
     $Settings | Add-Member -MemberType NoteProperty -Name PackageName `
         -Value (Get-PackageName $ProcessingPath)
+    Foreach ($RequiredSetting in $RequiredSettings) {
+        if (($Settings.PSobject.Properties.Name -notcontains $RequiredSetting) -or (-not $Settings.$RequiredSetting)) {
+            Write-Error -Message "No setting ""$RequiredSetting"" in settings file ""$SettingsPath"""
+        }
+    }
     $Settings
 }
 
@@ -496,7 +501,7 @@ function Get-FirefoxDownloadLink {
 
 function Get-JavaDownloadLink {
     $LatestPath = "http://java.com/en/download/manual.jsp"
-    $LatestVersion = (Invoke-WebRequest $LatestPath -UseBasicParsing).Links | ?{$_.outerText -match "Windows Offline"}
+    $LatestVersion = (Invoke-WebRequest $LatestPath -UseBasicParsing).Links | Where-Object {$_.outerText -match "Windows Offline"}
     return $LatestVersion.href
 }
 
@@ -508,7 +513,7 @@ function Get-JavaDownloadLink {
 
 function Get-FlashDownloadLink {
     $LatestPath = "http://www.adobe.com/au/products/flashplayer/distribution3.html"
-    $LatestVersion = (Invoke-WebRequest $LatestPath -UseBasicParsing).Links | ?{$_.href -match "plugin.msi"} | Select -First 1
+    $LatestVersion = (Invoke-WebRequest $LatestPath -UseBasicParsing).Links | Where-Object {$_.href -match "plugin.msi"} | Select-Object -First 1
     return $LatestVersion.href
 }
 
@@ -645,7 +650,7 @@ function Get-PythonLatestVersion {
         Select-Object -ExpandProperty Links | ForEach-Object {
             If ($_.href -eq "python-$VerString-amd64.exe") {
                 $RCRelease = $False
-            } 
+            }
         }
         $CheckVer++
     }
