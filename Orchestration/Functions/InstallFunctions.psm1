@@ -156,7 +156,7 @@ function ConvertFrom-DownloadXML {
 }
 
 function Import-Settings {
-    Param($ProcessingPath)
+    Param($ProcessingPath, [String[]]$RequiredSettings)
     $SettingsPath = "$(Split-Path -Path $PSScriptRoot -Parent)\settings.json"
     If (-Not (Test-Path -Path $SettingsPath)) {
         Write-Error "Unable to find $SettingsPath"
@@ -164,6 +164,11 @@ function Import-Settings {
     $Settings = Get-Content $SettingsPath -Raw | ConvertFrom-JSon
     $Settings | Add-Member -MemberType NoteProperty -Name PackageName `
         -Value (Get-PackageName $ProcessingPath)
+    Foreach ($RequiredSetting in $RequiredSettings) {
+        if (($Settings.PSobject.Properties.Name -notcontains $RequiredSetting) -or (-not $Settings.$RequiredSetting)) {
+            Write-Error -Message "No setting ""$RequiredSetting"" in settings file ""$SettingsPath"""
+        }
+    }
     $Settings
 }
 

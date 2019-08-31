@@ -3,7 +3,7 @@ Param($Manifest)
 
 Get-Module InstallFunctions | Remove-Module
 Import-Module (Join-Path $PSScriptRoot "InstallFunctions.psm1")
-$Settings = Import-Settings $Manifest
+$Settings = Import-Settings $Manifest -RequiredSettings 'PackageDest','PackageQueue','PackageSource'
 
 $XML = [xml](Get-Content $Manifest)
 
