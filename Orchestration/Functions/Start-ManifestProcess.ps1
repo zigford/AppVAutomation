@@ -31,7 +31,7 @@ $PackageProperties = @{
 }
 
 If ($PackageProperties.XML.Application.Type.Name -eq 'APPV') {
-    $PackageProperties | Select-NewerPackageVersion | New-SequencerScript
+    $PackageProperties | Select-NewerPackageVersion | New-SequencerScript | Start-VMSequencer
 } else {
     $PackageProperties | Select-NewerPackageVersion | New-AppPackageBundle
 }
